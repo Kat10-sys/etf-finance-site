@@ -10,9 +10,14 @@
   const growthHeadline = document.getElementById('growthHeadline');
   const growthStats = document.getElementById('growthStats');
   const growthTableBody = document.getElementById('growthTableBody');
+  const feeAInput = document.getElementById('feeAInput');
+  const feeBInput = document.getElementById('feeBInput');
+  const feeHeadline = document.getElementById('feeHeadline');
+  const feeStats = document.getElementById('feeStats');
 
   let displayMode = 'nominal'; // 'nominal' or 'real'
   let chart = null;
+  let feeChart = null;
 
   function chartTheme() {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -57,6 +62,13 @@
     return yearly;
   }
 
+  // Real-dollar view discounts every year's figures by inflation compounded
+  // to that point, so a $ shown for year 10 reflects year-10 purchasing
+  // power measured in today's dollars, not year-20's.
+  function deflate(value, year, annualInflation) {
+    return displayMode === 'real' ? value / Math.pow(1 + annualInflation, year) : value;
+  }
+
   function render() {
     const initial = Math.max(0, Number(initialInput.value) || 0);
     const years = Math.min(60, Math.max(1, Math.round(Number(yearsInput.value) || 0)));
@@ -65,19 +77,16 @@
     const contributionsPerYear = Number(frequencyInput.value) === 1 ? 1 : 12;
     const annualInflation = Math.max(0, Number(inflationInput.value) || 0) / 100;
     const growContribution = increaseWithInflation.checked;
+    const shared = { initial, years, annualRate, contribution, contributionsPerYear, annualInflation, growContribution };
 
-    const yearly = simulate({ initial, years, annualRate, contribution, contributionsPerYear, annualInflation, growContribution });
-
-    // Real-dollar view discounts every year's figures by inflation compounded
-    // to that point, so a $ shown for year 10 reflects year-10 purchasing
-    // power measured in today's dollars, not year-20's.
-    const deflate = (value, year) => (displayMode === 'real' ? value / Math.pow(1 + annualInflation, year) : value);
+    const yearly = simulate(shared);
+    const deflateYear = (value, year) => deflate(value, year, annualInflation);
 
     const finalRaw = yearly[yearly.length - 1];
-    const finalBalance = deflate(finalRaw.balance, years);
+    const finalBalance = deflateYear(finalRaw.balance, years);
     // The initial investment is already in today's dollars at year 0, so it
     // isn't discounted — only the contributions made in later years are.
-    const totalContributions = deflate(finalRaw.cumulativeContributions, years) + initial;
+    const totalContributions = deflateYear(finalRaw.cumulativeContributions, years) + initial;
     const totalGrowth = finalBalance - totalContributions;
 
     growthHeadline.innerHTML = `In <strong>${years} year${years === 1 ? '' : 's'}</strong>, this could grow to <strong>${formatMoney(finalBalance)}</strong>${displayMode === 'real' ? ' <span class="growth-headline-note">(in today’s dollars)</span>' : ''}.`;
@@ -93,8 +102,77 @@
       </div>
     `;
 
-    renderChart(yearly, initial, deflate);
-    renderTable(yearly, initial, deflate);
+    renderChart(yearly, initial, deflateYear);
+    renderTable(yearly, initial, deflateYear);
+    renderFeeImpact(shared);
+  }
+
+  // Reuses the same simulation engine with the annual return reduced by
+  // each fee, as a simplified approximation of fee drag — this is a
+  // mathematical comparison of two fee levels applied to the same
+  // hypothetical inputs above, not a projection of any specific fund.
+  function renderFeeImpact(shared) {
+    const feeA = Math.max(0, Number(feeAInput.value) || 0) / 100;
+    const feeB = Math.max(0, Number(feeBInput.value) || 0) / 100;
+    const { years, annualInflation } = shared;
+
+    const yearlyA = simulate({ ...shared, annualRate: shared.annualRate - feeA });
+    const yearlyB = simulate({ ...shared, annualRate: shared.annualRate - feeB });
+    const deflateYear = (value, year) => deflate(value, year, annualInflation);
+
+    const finalA = deflateYear(yearlyA[yearlyA.length - 1].balance, years);
+    const finalB = deflateYear(yearlyB[yearlyB.length - 1].balance, years);
+    const diff = Math.abs(finalA - finalB);
+    const pctA = (feeA * 100).toFixed(2);
+    const pctB = (feeB * 100).toFixed(2);
+
+    feeHeadline.innerHTML = `Over <strong>${years} year${years === 1 ? '' : 's'}</strong>, the difference between a <strong>${pctA}%</strong> fee and a <strong>${pctB}%</strong> fee works out to <strong>${formatMoney(diff)}</strong> on this hypothetical projection.`;
+
+    feeStats.innerHTML = `
+      <div class="stat-block">
+        <span class="swatch" style="background:#0d9488"></span>
+        <div><div class="stat-label">Ending balance at ${pctA}% fee</div><div class="stat-value">${formatMoney(finalA)}</div></div>
+      </div>
+      <div class="stat-block">
+        <span class="swatch" style="background:#d97706"></span>
+        <div><div class="stat-label">Ending balance at ${pctB}% fee</div><div class="stat-value">${formatMoney(finalB)}</div></div>
+      </div>
+    `;
+
+    renderFeeChart(yearlyA, yearlyB, pctA, pctB, deflateYear);
+  }
+
+  function renderFeeChart(yearlyA, yearlyB, pctA, pctB, deflateYear) {
+    const theme = chartTheme();
+    const labels = yearlyA.map((y) => `Yr ${y.year}`);
+    const dataA = yearlyA.map((y) => deflateYear(y.balance, y.year));
+    const dataB = yearlyB.map((y) => deflateYear(y.balance, y.year));
+
+    const ctx = document.getElementById('feeChart').getContext('2d');
+    if (feeChart) feeChart.destroy();
+    feeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: `${pctA}% fee`, data: dataA, borderColor: '#0d9488', backgroundColor: '#0d9488', pointRadius: 0, borderWidth: 2, tension: 0.05 },
+          { label: `${pctB}% fee`, data: dataB, borderColor: '#d97706', backgroundColor: '#d97706', pointRadius: 0, borderWidth: 2, tension: 0.05 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: theme.text } },
+          tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatMoney(item.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { autoSkip: true, maxTicksLimit: 12, color: theme.muted }, grid: { display: false } },
+          y: { ticks: { callback: (v) => formatMoney(v), color: theme.muted }, grid: { color: theme.grid } },
+        },
+      },
+    });
   }
 
   function renderChart(yearly, initial, deflate) {
@@ -151,7 +229,7 @@
     });
   }
 
-  [initialInput, yearsInput, returnInput, contributionInput, frequencyInput, inflationInput].forEach((el) => {
+  [initialInput, yearsInput, returnInput, contributionInput, frequencyInput, inflationInput, feeAInput, feeBInput].forEach((el) => {
     el.addEventListener('input', render);
   });
   increaseWithInflation.addEventListener('change', render);

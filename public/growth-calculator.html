@@ -98,11 +98,39 @@
         </table>
       </div>
     </div>
+
+    <h2 class="section-title">Fee Impact</h2>
+    <p class="section-sub">Compares two fee levels against the same investment above — enter any two numbers to see the mathematical effect of fees on a return, not a recommendation for or against any specific fund.</p>
+
+    <div class="panel">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Fee A (annual, %)</span>
+          <input type="number" id="feeAInput" value="0.2" min="0" max="10" step="0.01" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Fee B (annual, %)</span>
+          <input type="number" id="feeBInput" value="1.5" min="0" max="10" step="0.01" inputmode="decimal">
+        </label>
+      </div>
+      <div class="disclaimer-note">
+        Fees are subtracted directly from the expected annual return above, as a simplified approximation — this ignores compounding order, timing of fee deductions, and any difference in gross performance between funds. It is not a projection of any real fund's actual results.
+      </div>
+    </div>
+
+    <div class="panel" id="feeSummaryPanel">
+      <div class="growth-headline" id="feeHeadline"></div>
+      <div class="growth-stats" id="feeStats"></div>
+    </div>
+
+    <div class="panel chart-card">
+      <div class="chart-wrap"><canvas id="feeChart"></canvas></div>
+    </div>
   </div>
 
   <footer>
     <div class="container">
-      Hypothetical projection for informational purposes only — assumes a constant rate of return, which real investments do not provide. Not investment advice.
+      <strong>This page is a mathematical illustration, not investment advice.</strong> Every figure here is a hypothetical projection computed from the numbers you enter — it assumes a constant rate of return that no real investment guarantees, and does not account for taxes, account type, fund performance differences, market volatility, or your personal financial situation. Nothing on this page recommends buying, selling, or switching any specific investment, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making investment decisions.
     </div>
   </footer>
 

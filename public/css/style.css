@@ -522,6 +522,15 @@ table.results-table .symbol-inner {
 .stat-label { font-size: 0.78rem; color: var(--text-muted); }
 .stat-value { font-size: 1.1rem; font-weight: 700; color: var(--heading); }
 
+.disclaimer-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 720px) {
   .features { grid-template-columns: 1fr; }
   .hero h1 { font-size: 1.9rem; }
