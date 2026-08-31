@@ -271,8 +271,9 @@
       const res = await fetch(`/api/exposure?symbol=${encodeURIComponent(sym)}`);
       const data = await res.json();
       if (!res.ok) {
-        showPieEmpty(sectorCanvas, 'Exposure data unavailable.');
-        showPieEmpty(geoCanvas, 'Exposure data unavailable.');
+        const msg = data.error || 'Exposure data unavailable.';
+        showPieEmpty(sectorCanvas, msg);
+        showPieEmpty(geoCanvas, msg);
         return;
       }
       renderPie(`sector-${sym}`, data.sectorWeightings);

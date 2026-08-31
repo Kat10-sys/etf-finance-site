@@ -284,11 +284,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // life of the process, and every subsequent call reuses it instantly. So
 // it's worth retrying fairly persistently on a 429 rather than giving up
 // quickly, since success on any attempt fixes things for everyone after.
+let crumbWarm = false;
+
 async function quoteSummaryWithRetry(symbol, options, attempts = 5) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await yahooFinance.quoteSummary(symbol, options);
+      const result = await yahooFinance.quoteSummary(symbol, options);
+      crumbWarm = true;
+      return result;
     } catch (e) {
       lastErr = e;
       if (!/429/.test(e.message) || i === attempts - 1) throw e;
@@ -315,8 +319,11 @@ app.get('/api/exposure', async (req, res) => {
       });
     } catch (e) {
       console.error(`[exposure] quoteSummary failed for ${symbol}: ${e.message}`);
+      const stillWarming = !crumbWarm && /429/.test(e.message);
       return res.status(502).json({
-        error: 'Exposure data temporarily unavailable from the data provider.',
+        error: stillWarming
+          ? "The data provider is rate-limiting this server right now. It's retrying automatically in the background — try again in a minute or two."
+          : 'Exposure data temporarily unavailable from the data provider.',
         detail: e.message,
       });
     }
@@ -412,13 +419,33 @@ function humanizeSector(key) {
   return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Yahoo's crumb block has been observed to last several minutes at a
+// stretch on Render's shared IPs — much longer than any single request
+// should be made to wait. So rather than bounding retries to one request's
+// lifetime, keep trying quietly in the background for as long as the
+// server runs. The moment any attempt succeeds (this loop or a real
+// request's own retry), yahoo-finance2 caches the crumb for the rest of
+// the process's life and everything works normally from then on.
+async function warmCrumbInBackground() {
+  const MAX_ATTEMPTS = 200;
+  const RETRY_DELAY_MS = 20000;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS && !crumbWarm; attempt++) {
+    try {
+      await yahooFinance.quoteSummary('AAPL', { modules: ['price'] });
+      crumbWarm = true;
+      console.log(`[warmup] Yahoo crumb established after ${attempt} attempt(s)`);
+      return;
+    } catch (e) {
+      if (attempt === 1 || attempt % 5 === 0) {
+        console.error(`[warmup] attempt ${attempt} failed: ${e.message}`);
+      }
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+  if (!crumbWarm) console.error('[warmup] giving up after max attempts');
+}
+
 app.listen(PORT, () => {
   console.log(`ETF finance site running at http://localhost:${PORT}`);
-
-  // Negotiate and cache a Yahoo crumb in the background at startup, so the
-  // (sometimes flaky, retried) negotiation happens before a real visitor
-  // needs exposure data rather than during their first request.
-  quoteSummaryWithRetry('AAPL', { modules: ['price'] }, 5)
-    .then(() => console.log('[startup] Yahoo crumb warmed successfully'))
-    .catch((e) => console.error(`[startup] Yahoo crumb warm-up failed: ${e.message}`));
+  warmCrumbInBackground();
 });
