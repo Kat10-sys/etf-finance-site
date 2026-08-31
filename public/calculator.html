@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ETF Comparison Tool — Northbeam Finance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="brand">Northbeam <span>Finance</span></a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/calculator.html" class="active">ETF Comparison</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>ETF &amp; Stock Comparison</h1>
+      <p>Add US, .TO (TSX), or .NE (NEO / Cboe Canada) tickers to compare performance and portfolio exposure.</p>
+    </div>
+
+    <div class="panel">
+      <div class="ticker-input-row">
+        <input id="tickerInput" type="text" placeholder="e.g. VOO, VFV.TO, HXT.NE" autocomplete="off" />
+        <button class="btn" id="addTickerBtn">Add</button>
+      </div>
+      <div class="hint">Leave off any suffix for US tickers. Use <strong>.TO</strong> for Toronto Stock Exchange, <strong>.NE</strong> for NEO / Cboe Canada. Up to 8 tickers.</div>
+      <div class="chips" id="chipsContainer"></div>
+
+      <div class="range-row">
+        <div class="range-buttons">
+          <button class="range-btn" data-range="6mo">6 Months</button>
+          <button class="range-btn" data-range="1y">1 Year</button>
+          <button class="range-btn active" data-range="max-common">Max Common</button>
+        </div>
+        <div class="range-meta" id="rangeMeta"></div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <button class="btn" id="compareBtn" disabled>Compare</button>
+      </div>
+      <div class="status-line" id="statusLine"></div>
+    </div>
+
+    <div id="resultsSection">
+      <div class="panel chart-card">
+        <div class="chart-wrap"><canvas id="returnChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <table class="results-table" id="resultsTable">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Period</th>
+              <th>Price Return</th>
+              <th>Dividend + Cash</th>
+              <th>Total Return (DRIP)</th>
+            </tr>
+          </thead>
+          <tbody id="resultsTableBody"></tbody>
+        </table>
+      </div>
+
+      <h2 class="section-title">Sector &amp; Geographic Exposure</h2>
+      <p class="section-sub">Based on each fund's most recently disclosed holdings.</p>
+      <div class="exposure-grid" id="exposureGrid"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      Data sourced from Yahoo Finance. For informational purposes only — not investment advice.
+    </div>
+  </footer>
+
+  <script src="/js/calculator.js"></script>
+</body>
+</html>
