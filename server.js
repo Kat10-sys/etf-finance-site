@@ -478,6 +478,61 @@ app.get('/api/compare', async (req, res) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// ---------- Global X live expense-ratio scrape ----------
+// Yahoo Finance has no expense-ratio data at all for the Canadian ETF
+// universe (confirmed across every quoteSummary module), and most issuers'
+// sites use internal fund IDs that can't be derived from a ticker. Global X
+// is the one exception: their product pages live at a predictable
+// /product/<ticker> URL for any of their funds, so this can be scraped
+// automatically for a ticker as soon as it's requested, instead of needing
+// a manually-added override file (see data/exposure-overrides/HX*.json for
+// the handful added by hand before this existed).
+const globalXMerCache = new Map(); // ticker -> { fetchedAt, expenseRatio }
+const GLOBAL_X_MER_TTL = 24 * 60 * 60 * 1000;
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
+function looksLikeGlobalX(quoteSummary) {
+  const family = quoteSummary.fundProfile?.family || '';
+  const name = quoteSummary.price?.longName || quoteSummary.price?.shortName || '';
+  return /global x/i.test(family) || /global x/i.test(name);
+}
+
+async function scrapeGlobalXExpenseRatio(symbol) {
+  const ticker = symbol.split('.')[0].toLowerCase();
+  const cached = globalXMerCache.get(ticker);
+  if (cached && Date.now() - cached.fetchedAt < GLOBAL_X_MER_TTL) return cached.expenseRatio;
+
+  let expenseRatio = null;
+  try {
+    const res = await fetch(`https://www.globalx.ca/product/${ticker}`, {
+      headers: { 'User-Agent': BROWSER_USER_AGENT },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      // Global X's product pages redirect unrecognized tickers to an
+      // unrelated fallback page rather than a 404 — confirm the page is
+      // actually for the ticker we asked for before trusting anything on it.
+      const titleMatch = html.match(/<title[^>]*>\s*([A-Za-z0-9.]+)\s*-/);
+      const titleTicker = titleMatch ? titleMatch[1].toLowerCase() : null;
+      if (titleTicker === ticker) {
+        const labelIdx = html.indexOf('Management Expense Ratio');
+        if (labelIdx !== -1) {
+          const chunk = html.slice(labelIdx, labelIdx + 4000);
+          const pctMatch = chunk.match(/(\d+(?:\.\d+)?)\s*%/);
+          if (pctMatch) expenseRatio = parseFloat(pctMatch[1]) / 100;
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`[globalx-mer] scrape failed for ${symbol}: ${e.message}`);
+  }
+
+  globalXMerCache.set(ticker, { fetchedAt: Date.now(), expenseRatio });
+  return expenseRatio;
+}
+
 // Yahoo's crumb-authenticated endpoints (needed for sector/holdings data)
 // return 429 fairly often from shared/cloud-hosting IP ranges — but this
 // appears to be a short burst-limit rather than a hard IP ban: once any
@@ -587,6 +642,8 @@ app.get('/api/exposure', async (req, res) => {
     let expenseRatio = quoteSummary.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio || null;
     if (exposureOverride?.expenseRatio != null) {
       expenseRatio = exposureOverride.expenseRatio;
+    } else if (expenseRatio == null && looksLikeGlobalX(quoteSummary)) {
+      expenseRatio = await scrapeGlobalXExpenseRatio(symbol);
     }
 
     const data = {
