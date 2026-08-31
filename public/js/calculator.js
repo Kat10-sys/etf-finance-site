@@ -6,6 +6,8 @@
     range: 'max-common',
     metric: 'totalReturnDRIP',
     currency: 'native',
+    customStart: '',
+    customEnd: '',
     lastResults: null,
   };
 
@@ -25,6 +27,9 @@
   const exposureGrid = document.getElementById('exposureGrid');
   const rangeMeta = document.getElementById('rangeMeta');
   const rangeButtons = document.querySelectorAll('.range-btn');
+  const customRangeRow = document.getElementById('customRangeRow');
+  const customStartInput = document.getElementById('customStartInput');
+  const customEndInput = document.getElementById('customEndInput');
   const metricButtons = document.querySelectorAll('.metric-btn');
   const currencyButtons = document.querySelectorAll('.currency-btn');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
@@ -53,6 +58,10 @@
 
   function normalizeTicker(raw) {
     return raw.trim().toUpperCase();
+  }
+
+  function toISODate(ts) {
+    return new Date(ts).toISOString().slice(0, 10);
   }
 
   function isValidTicker(sym) {
@@ -118,9 +127,30 @@
       rangeButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.range = btn.dataset.range;
+      customRangeRow.style.display = state.range === 'custom' ? 'flex' : 'none';
+      if (state.range === 'custom' && !state.customStart) {
+        // Default to a 1-year window so the date fields aren't empty —
+        // the user can adjust either end from there.
+        const now = Date.now();
+        state.customStart = toISODate(now - 365 * 24 * 60 * 60 * 1000);
+        state.customEnd = toISODate(now);
+        customStartInput.value = state.customStart;
+        customEndInput.value = state.customEnd;
+      }
       updateURL();
-      if (state.lastResults) runCompare();
+      if (state.lastResults && (state.range !== 'custom' || state.customStart)) runCompare();
     });
+  });
+
+  customStartInput.addEventListener('change', () => {
+    state.customStart = customStartInput.value;
+    updateURL();
+    if (state.lastResults && state.customStart) runCompare();
+  });
+  customEndInput.addEventListener('change', () => {
+    state.customEnd = customEndInput.value;
+    updateURL();
+    if (state.lastResults && state.customStart) runCompare();
   });
 
   compareBtn.addEventListener('click', runCompare);
@@ -171,6 +201,10 @@
     const params = new URLSearchParams();
     if (state.tickers.length) params.set('symbols', state.tickers.join(','));
     params.set('range', state.range);
+    if (state.range === 'custom') {
+      if (state.customStart) params.set('start', state.customStart);
+      if (state.customEnd) params.set('end', state.customEnd);
+    }
     if (state.metric !== 'totalReturnDRIP') params.set('metric', state.metric);
     if (state.currency !== 'native') params.set('currency', state.currency);
     const qs = params.toString();
@@ -190,6 +224,14 @@
     if (range) {
       state.range = range;
       rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
+    }
+
+    if (state.range === 'custom') {
+      const start = params.get('start');
+      const end = params.get('end');
+      if (start) { state.customStart = start; customStartInput.value = start; }
+      if (end) { state.customEnd = end; customEndInput.value = end; }
+      customRangeRow.style.display = 'flex';
     }
 
     const metric = params.get('metric');
@@ -225,15 +267,27 @@
   }
 
   function formatDate(ts) {
-    return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    // All timestamps in this app are UTC-midnight-normalized day markers,
+    // not real moments in time — formatting with the viewer's local
+    // timezone can shift the displayed date back a day west of UTC, so
+    // this reads the date fields out in UTC instead.
+    return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   }
 
   async function runCompare() {
     if (state.tickers.length === 0) return;
+    if (state.range === 'custom' && !state.customStart) {
+      showStatus('Pick a start date for the custom range.', true);
+      return;
+    }
     compareBtn.disabled = true;
     showStatus('Fetching price and dividend history…');
     try {
       const params = new URLSearchParams({ symbols: state.tickers.join(','), range: state.range, currency: state.currency });
+      if (state.range === 'custom') {
+        params.set('start', state.customStart);
+        if (state.customEnd) params.set('end', state.customEnd);
+      }
       const res = await fetch(`/api/compare?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed.');
@@ -470,6 +524,10 @@
       },
     });
   }
+
+  const todayISO = toISODate(Date.now());
+  customStartInput.max = todayISO;
+  customEndInput.max = todayISO;
 
   restoreFromURL();
 })();

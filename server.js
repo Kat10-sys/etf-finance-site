@@ -375,9 +375,32 @@ app.get('/api/compare', async (req, res) => {
 
     const now = Date.now();
     let startTs;
-    if (range === 'ytd') startTs = startOfYear(now);
-    else if (RANGE_SPECS[range] != null) startTs = subtractCalendar(now, RANGE_SPECS[range]);
-    else startTs = commonStart; // max-common
+    let endTs = now;
+    if (range === 'custom') {
+      const parseDateParam = (raw) => {
+        if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+        const d = new Date(`${raw}T00:00:00Z`);
+        return Number.isNaN(d.getTime()) ? null : d.getTime();
+      };
+      const customStart = parseDateParam(req.query.start);
+      const customEnd = parseDateParam(req.query.end);
+      if (customStart == null) {
+        return res.status(400).json({ error: 'Custom range requires a valid start date (YYYY-MM-DD).' });
+      }
+      startTs = customStart;
+      // A date-only end param means "through the end of that day" — extend
+      // to just before the next day's midnight, capped at now.
+      endTs = customEnd != null ? Math.min(customEnd + DAY_MS - 1, now) : now;
+      if (startTs >= endTs) {
+        return res.status(400).json({ error: 'Custom start date must be before the end date.' });
+      }
+    } else if (range === 'ytd') {
+      startTs = startOfYear(now);
+    } else if (RANGE_SPECS[range] != null) {
+      startTs = subtractCalendar(now, RANGE_SPECS[range]);
+    } else {
+      startTs = commonStart; // max-common
+    }
 
     // Optional currency normalization: 'native' (default) leaves each
     // ticker in its reported currency; 'CAD'/'USD' converts every ticker
@@ -425,7 +448,7 @@ app.get('/api/compare', async (req, res) => {
 
     const results = {};
     for (const sym of validSymbols) {
-      const metrics = computeMetrics(histories[sym], startTs, now);
+      const metrics = computeMetrics(histories[sym], startTs, endTs);
       results[sym] = {
         symbol: sym,
         name: histories[sym].longName,
@@ -442,7 +465,7 @@ app.get('/api/compare', async (req, res) => {
       range,
       requestedStart: startTs,
       commonStartDate: commonStart,
-      asOf: now,
+      asOf: endTs,
       currency: targetCurrency || 'native',
       results,
       fetchErrors,
