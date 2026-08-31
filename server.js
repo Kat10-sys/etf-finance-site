@@ -233,7 +233,7 @@ function computeMetrics(history, startTs, endTs) {
     // captured issuer-override data (e.g. HEQL.TO) is stamped at exact
     // UTC midnight.
     const dayKey = Math.floor(point.date / DAY_MS) * DAY_MS;
-    curve.push({ date: dayKey, cumulativeReturn: value / priceStart - 1 });
+    curve.push({ date: dayKey, cumulativeReturn: value / priceStart - 1, price: point.close });
   }
   const totalReturnDRIP = curve[curve.length - 1].cumulativeReturn;
 

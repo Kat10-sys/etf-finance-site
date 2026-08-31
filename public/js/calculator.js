@@ -152,8 +152,10 @@
     const dates = Array.from(dateSet).sort((a, b) => a - b);
     const labels = dates.map((d) => formatDate(d));
 
+    const priceMaps = {};
     const datasets = symbols.map((s) => {
       const map = new Map(results[s].curve.map((p) => [p.date, p.cumulativeReturn * 100]));
+      priceMaps[s] = new Map(results[s].curve.map((p) => [p.date, p.price]));
       return {
         label: s,
         data: dates.map((d) => (map.has(d) ? map.get(d) : null)),
@@ -180,7 +182,16 @@
           legend: { position: 'bottom' },
           tooltip: {
             callbacks: {
-              label: (item) => `${item.dataset.label}: ${item.parsed.y == null ? '—' : item.parsed.y.toFixed(2) + '%'}`,
+              label: (item) => {
+                const sym = item.dataset.label;
+                const pct = item.parsed.y;
+                if (pct == null) return `${sym}: —`;
+                const sign = pct >= 0 ? '+' : '';
+                const price = priceMaps[sym]?.get(dates[item.dataIndex]);
+                const currency = results[sym]?.currency || '';
+                const priceStr = price != null ? `  ·  ${currency} ${price.toFixed(2)}` : '';
+                return `${sym}: ${sign}${pct.toFixed(2)}%${priceStr}`;
+              },
             },
           },
         },
