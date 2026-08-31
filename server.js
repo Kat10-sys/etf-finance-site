@@ -145,19 +145,26 @@ async function fetchHistory(symbol) {
   let dataGapNote = null;
   const override = issuerOverrides.get(symbol);
   if (override) {
-    const overrideLastDate = override.series[override.series.length - 1][0];
+    // Compare by calendar day, not raw millisecond timestamp. The override
+    // data is stamped at exact UTC midnight; Yahoo stamps its bars ~13:30
+    // UTC the same day, which is numerically *later* than midnight — so a
+    // naive ">" comparison let Yahoo's bar for the override's own last day
+    // sneak in as an extra "new" point, producing two entries for the same
+    // trading day (with two different prices) right at the splice, which
+    // showed up as a kink in the chart line.
+    const overrideLastDay = Math.floor(override.series[override.series.length - 1][0] / DAY_MS);
     const mergedSeries = override.series.map(([date, close]) => ({ date, close }));
     for (const point of series) {
-      if (point.date > overrideLastDate) mergedSeries.push(point);
+      if (Math.floor(point.date / DAY_MS) > overrideLastDay) mergedSeries.push(point);
     }
     finalSeries = mergedSeries;
 
-    const overrideLastDivDate = override.dividends.length
-      ? override.dividends[override.dividends.length - 1].date
+    const overrideLastDivDay = override.dividends.length
+      ? Math.floor(override.dividends[override.dividends.length - 1].date / DAY_MS)
       : -Infinity;
     const mergedDividends = [...override.dividends];
     for (const div of dividends) {
-      if (div.date > overrideLastDivDate) mergedDividends.push(div);
+      if (Math.floor(div.date / DAY_MS) > overrideLastDivDay) mergedDividends.push(div);
     }
     dividends = mergedDividends;
 
