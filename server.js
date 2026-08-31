@@ -25,16 +25,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Any range not listed here (e.g. 'max-common') falls back to each
-// comparison's common available-data start date.
-const RANGE_DAYS = {
-  '1w': 7,
-  '1mo': 30,
-  '3mo': 91,
-  '6mo': 182,
-  '1y': 365,
-  '3y': 365 * 3,
-  '5y': 365 * 5,
+// comparison's common available-data start date. Calendar-based (months/
+// years), not a flat day count: a flat "30 days" for "1 Month" drifts
+// against what a calendar month actually spans, and for short ranges that
+// drift is a large fraction of the window — it visibly skews the return
+// rather than just rounding error.
+const RANGE_SPECS = {
+  '1w': { days: 7 },
+  '1mo': { months: 1 },
+  '3mo': { months: 3 },
+  '6mo': { months: 6 },
+  '1y': { years: 1 },
+  '3y': { years: 3 },
+  '5y': { years: 5 },
 };
+
+function subtractCalendar(fromMs, { days = 0, months = 0, years = 0 }) {
+  const d = new Date(fromMs);
+  d.setUTCFullYear(d.getUTCFullYear() - years);
+  d.setUTCMonth(d.getUTCMonth() - months);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.getTime();
+}
 
 // ---------- in-memory caches ----------
 const historyCache = new Map(); // symbol -> { fetchedAt, series, dividends }
@@ -242,11 +254,11 @@ app.get('/api/compare', async (req, res) => {
       return res.status(404).json({ error: 'No valid tickers found.', fetchErrors });
     }
 
-    const now = Date.now();
     const earliestDates = validSymbols.map((s) => histories[s].series[0].date);
     const commonStart = Math.max(...earliestDates);
 
-    const startTs = RANGE_DAYS[range] != null ? now - RANGE_DAYS[range] * DAY_MS : commonStart; // max-common
+    const now = Date.now();
+    const startTs = RANGE_SPECS[range] != null ? subtractCalendar(now, RANGE_SPECS[range]) : commonStart; // max-common
 
     const results = {};
     for (const sym of validSymbols) {
