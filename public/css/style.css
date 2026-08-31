@@ -206,16 +206,17 @@ footer {
   gap: 14px;
   margin-top: 22px;
 }
-.range-buttons { display: flex; gap: 8px; }
+.range-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .range-btn {
-  padding: 9px 16px;
+  padding: 8px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: white;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
 }
 .range-btn.active {
   background: var(--navy);

@@ -24,6 +24,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Any range not listed here (e.g. 'max-common') falls back to each
+// comparison's common available-data start date.
+const RANGE_DAYS = {
+  '1w': 7,
+  '1mo': 30,
+  '3mo': 91,
+  '6mo': 182,
+  '1y': 365,
+  '3y': 365 * 3,
+  '5y': 365 * 5,
+};
+
 // ---------- in-memory caches ----------
 const historyCache = new Map(); // symbol -> { fetchedAt, series, dividends }
 const exposureCache = new Map(); // symbol -> { fetchedAt, data }
@@ -234,10 +246,7 @@ app.get('/api/compare', async (req, res) => {
     const earliestDates = validSymbols.map((s) => histories[s].series[0].date);
     const commonStart = Math.max(...earliestDates);
 
-    let startTs;
-    if (range === '6mo') startTs = now - 182 * DAY_MS;
-    else if (range === '1y') startTs = now - 365 * DAY_MS;
-    else startTs = commonStart; // max-common
+    const startTs = RANGE_DAYS[range] != null ? now - RANGE_DAYS[range] * DAY_MS : commonStart; // max-common
 
     const results = {};
     for (const sym of validSymbols) {
