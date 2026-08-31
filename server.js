@@ -211,21 +211,23 @@ function computeMetrics(history, startTs, endTs) {
   const priceReturn = priceEnd / priceStart - 1;
   const dividendPlusCash = (priceEnd + dividendSum) / priceStart - 1;
 
-  // DRIP simulation + a return curve for charting
+  // DRIP simulation + a return curve (all three metrics) for charting
   let units = 1;
+  let dividendCumSum = 0;
   const curve = [];
   let divIdx = 0;
   for (let i = 0; i < windowSeries.length; i++) {
     const point = windowSeries[i];
     while (divIdx < windowDividends.length && windowDividends[divIdx].date <= point.date) {
       const div = windowDividends[divIdx];
+      dividendCumSum += div.amount;
       const priceOnDivDate = findOnOrAfter(windowSeries, div.date)?.close
         ?? findOnOrBefore(windowSeries, div.date)?.close
         ?? point.close;
       units += (units * div.amount) / priceOnDivDate;
       divIdx++;
     }
-    const value = units * point.close;
+    const dripValue = units * point.close;
     // Normalize to the calendar day (not the source's exact intraday
     // timestamp) so charting a mix of data sources doesn't create two
     // separate x-axis points for what's really the same trading day —
@@ -233,9 +235,15 @@ function computeMetrics(history, startTs, endTs) {
     // captured issuer-override data (e.g. HEQL.TO) is stamped at exact
     // UTC midnight.
     const dayKey = Math.floor(point.date / DAY_MS) * DAY_MS;
-    curve.push({ date: dayKey, cumulativeReturn: value / priceStart - 1, price: point.close });
+    curve.push({
+      date: dayKey,
+      price: point.close,
+      priceReturn: point.close / priceStart - 1,
+      dividendPlusCash: (point.close + dividendCumSum) / priceStart - 1,
+      totalReturnDRIP: dripValue / priceStart - 1,
+    });
   }
-  const totalReturnDRIP = curve[curve.length - 1].cumulativeReturn;
+  const totalReturnDRIP = curve[curve.length - 1].totalReturnDRIP;
 
   return {
     insufficientData: false,

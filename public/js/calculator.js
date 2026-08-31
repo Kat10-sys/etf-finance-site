@@ -4,7 +4,14 @@
   const state = {
     tickers: [],
     range: 'max-common',
+    metric: 'totalReturnDRIP',
     lastResults: null,
+  };
+
+  const METRIC_LABELS = {
+    priceReturn: 'Price Return (%)',
+    dividendPlusCash: 'Dividend + Cash (%)',
+    totalReturnDRIP: 'Total Return With DRIP (%)',
   };
 
   const tickerInput = document.getElementById('tickerInput');
@@ -17,6 +24,7 @@
   const exposureGrid = document.getElementById('exposureGrid');
   const rangeMeta = document.getElementById('rangeMeta');
   const rangeButtons = document.querySelectorAll('.range-btn');
+  const metricButtons = document.querySelectorAll('.metric-btn');
 
   let returnChart = null;
   const pieCharts = {};
@@ -97,6 +105,15 @@
 
   compareBtn.addEventListener('click', runCompare);
 
+  metricButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      metricButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.metric = btn.dataset.metric;
+      if (state.lastResults) renderChart(state.lastResults.results);
+    });
+  });
+
   function formatPercent(value) {
     if (value == null || Number.isNaN(value)) return '—';
     const pct = value * 100;
@@ -152,9 +169,10 @@
     const dates = Array.from(dateSet).sort((a, b) => a - b);
     const labels = dates.map((d) => formatDate(d));
 
+    const metric = state.metric;
     const priceMaps = {};
     const datasets = symbols.map((s) => {
-      const map = new Map(results[s].curve.map((p) => [p.date, p.cumulativeReturn * 100]));
+      const map = new Map(results[s].curve.map((p) => [p.date, p[metric] * 100]));
       priceMaps[s] = new Map(results[s].curve.map((p) => [p.date, p.price]));
       return {
         label: s,
@@ -178,7 +196,7 @@
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          title: { display: true, text: 'Total Return With DRIP (%)', color: '#1e293b', font: { size: 14, weight: '600' } },
+          title: { display: true, text: METRIC_LABELS[metric], color: '#1e293b', font: { size: 14, weight: '600' } },
           legend: { position: 'bottom' },
           tooltip: {
             callbacks: {

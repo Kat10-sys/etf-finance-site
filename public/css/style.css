@@ -237,6 +237,23 @@ footer {
 
 .chart-card { padding: 20px 24px 24px; }
 .chart-card .chart-wrap { position: relative; height: 360px; width: 100%; }
+.metric-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.metric-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: white;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.metric-btn.active {
+  background: #ecfdf5;
+  border-color: var(--teal);
+  color: var(--teal);
+}
 
 table.results-table {
   width: 100%;
