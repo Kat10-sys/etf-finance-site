@@ -414,8 +414,8 @@
       pieDataCache[sym] = data;
       renderPie(`sector-${sym}`, data.sectorWeightings);
       renderPie(`geo-${sym}`, data.geoWeightings);
-      if (data.geoIsEstimate && data.geoWeightings.length) {
-        document.getElementById(`note-${sym}`).textContent = 'Geography estimated from top disclosed holdings.';
+      if (data.geoNote && data.geoWeightings.length) {
+        document.getElementById(`note-${sym}`).textContent = data.geoNote;
       }
       const expenseEl = document.getElementById(`expense-${sym}`);
       if (expenseEl) {

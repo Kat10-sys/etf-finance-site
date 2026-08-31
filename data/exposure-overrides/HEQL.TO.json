@@ -1,0 +1,18 @@
+{
+  "symbol": "HEQL.TO",
+  "asOf": "2026-07-31",
+  "source": "https://www.globalx.ca/product/heqt — issuer-published \"Top Geographic Exposure\" for HEQT (Global X All-Equity Asset Allocation ETF), which is HEQL's sole underlying holding at ~99.85% of the portfolio, so its geographic mix carries over directly (HEQL just adds ~25% leverage on top).",
+  "note": "Yahoo Finance does not report a holdings list for HEQL.TO at all, so no geographic estimate could be derived. This is the issuer's own published country breakdown for HEQT.",
+  "geoWeightings": [
+    { "label": "United States", "weight": 0.4537 },
+    { "label": "Canada", "weight": 0.2078 },
+    { "label": "Japan", "weight": 0.0611 },
+    { "label": "United Kingdom", "weight": 0.0353 },
+    { "label": "Switzerland", "weight": 0.0234 },
+    { "label": "France", "weight": 0.0228 },
+    { "label": "Taiwan", "weight": 0.0227 },
+    { "label": "Germany", "weight": 0.0226 },
+    { "label": "South Korea", "weight": 0.0177 },
+    { "label": "Australia", "weight": 0.0174 }
+  ]
+}

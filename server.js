@@ -146,6 +146,22 @@ if (fs.existsSync(overridesDir)) {
   }
 }
 
+// Same idea, for sector/geographic exposure: some funds (e.g. HEQL.TO)
+// don't expose a holdings list via Yahoo at all, so no estimate can be
+// derived from it. Where the issuer's own site publishes a real country
+// breakdown (directly, or via a near-100% underlying holding whose mix
+// carries over, like HEQL -> HEQT), we substitute that instead of leaving
+// the geography pie empty.
+const exposureOverrides = new Map();
+const exposureOverridesDir = path.join(__dirname, 'data', 'exposure-overrides');
+if (fs.existsSync(exposureOverridesDir)) {
+  for (const file of fs.readdirSync(exposureOverridesDir)) {
+    if (!file.endsWith('.json')) continue;
+    const data = JSON.parse(fs.readFileSync(path.join(exposureOverridesDir, file), 'utf8'));
+    exposureOverrides.set(data.symbol, data);
+  }
+}
+
 async function fetchHistory(symbol) {
   const cached = historyCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt < HISTORY_TTL) return cached;
@@ -537,6 +553,14 @@ app.get('/api/exposure', async (req, res) => {
         .sort((a, b) => b.weight - a.weight);
     }
 
+    let geoNote = geoWeightings.length ? 'Geography estimated from top disclosed holdings.' : null;
+    const exposureOverride = exposureOverrides.get(symbol);
+    if (exposureOverride?.geoWeightings) {
+      geoWeightings = exposureOverride.geoWeightings;
+      geoIsEstimate = true;
+      geoNote = exposureOverride.note;
+    }
+
     const data = {
       symbol,
       name: quoteSummary.price?.longName || quoteSummary.price?.shortName || symbol,
@@ -550,6 +574,7 @@ app.get('/api/exposure', async (req, res) => {
       holdings,
       geoWeightings,
       geoIsEstimate,
+      geoNote,
     };
 
     exposureCache.set(symbol, { fetchedAt: Date.now(), data });
