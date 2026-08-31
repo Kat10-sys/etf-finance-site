@@ -3,6 +3,8 @@
   "asOf": "2026-07-31",
   "source": "https://www.globalx.ca/product/heqt — issuer-published \"Top Geographic Exposure\" for HEQT (Global X All-Equity Asset Allocation ETF), which is HEQL's sole underlying holding at ~99.85% of the portfolio, so its geographic mix carries over directly (HEQL just adds ~25% leverage on top).",
   "note": "Yahoo Finance does not report a holdings list for HEQL.TO at all, so no geographic estimate could be derived. This is the issuer's own published country breakdown for HEQT.",
+  "expenseRatio": 0.0140,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HEQL.TO. This is Global X's own published Management Expense Ratio (MER) as at December 31, 2025, from globalx.ca/product/heql (management fee 0.45% + other fund expenses).",
   "geoWeightings": [
     { "label": "United States", "weight": 0.4537 },
     { "label": "Canada", "weight": 0.2078 },

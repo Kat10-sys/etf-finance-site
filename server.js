@@ -561,6 +561,11 @@ app.get('/api/exposure', async (req, res) => {
       geoNote = exposureOverride.note;
     }
 
+    let expenseRatio = quoteSummary.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio || null;
+    if (exposureOverride?.expenseRatio != null) {
+      expenseRatio = exposureOverride.expenseRatio;
+    }
+
     const data = {
       symbol,
       name: quoteSummary.price?.longName || quoteSummary.price?.shortName || symbol,
@@ -569,7 +574,7 @@ app.get('/api/exposure', async (req, res) => {
       // funds it doesn't have real expense-ratio data for — e.g. XEQT.TO's
       // actual MER is ~0.20%, not 0%. Treat 0 as "not reported" rather than
       // display a number we know is a placeholder, not a fact.
-      expenseRatio: quoteSummary.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio || null,
+      expenseRatio,
       sectorWeightings,
       holdings,
       geoWeightings,

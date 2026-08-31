@@ -3,6 +3,8 @@
   "asOf": "2026-07-31",
   "source": "https://www.globalx.ca/product/heqt — issuer-published \"Top Geographic Exposure\" table for this fund directly.",
   "note": "Issuer-published country breakdown (Global X's own \"Top Geographic Exposure\" table), more granular than the sector-holdings-based estimate this app derives for most funds.",
+  "expenseRatio": 0.0024,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HEQT.TO. This is Global X's own published Management Expense Ratio (MER) as at December 31, 2025, from globalx.ca/product/heqt (management fee 0.18% + other fund expenses).",
   "geoWeightings": [
     { "label": "United States", "weight": 0.4537 },
     { "label": "Canada", "weight": 0.2078 },
