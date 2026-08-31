@@ -217,7 +217,14 @@ function computeMetrics(history, startTs, endTs) {
       divIdx++;
     }
     const value = units * point.close;
-    curve.push({ date: point.date, cumulativeReturn: value / priceStart - 1 });
+    // Normalize to the calendar day (not the source's exact intraday
+    // timestamp) so charting a mix of data sources doesn't create two
+    // separate x-axis points for what's really the same trading day —
+    // Yahoo stamps daily bars around 13:30 UTC, while the manually
+    // captured issuer-override data (e.g. HEQL.TO) is stamped at exact
+    // UTC midnight.
+    const dayKey = Math.floor(point.date / DAY_MS) * DAY_MS;
+    curve.push({ date: dayKey, cumulativeReturn: value / priceStart - 1 });
   }
   const totalReturnDRIP = curve[curve.length - 1].cumulativeReturn;
 
