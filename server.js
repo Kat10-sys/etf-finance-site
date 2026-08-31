@@ -56,6 +56,15 @@ function subtractCalendar(fromMs, { days = 0, months = 0, years = 0 }) {
   return d.getTime();
 }
 
+// Jan 1 of the current UTC year, at midnight — same normalization reasoning
+// as subtractCalendar above.
+function startOfYear(fromMs) {
+  const d = new Date(fromMs);
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCMonth(0, 1);
+  return d.getTime();
+}
+
 // ---------- in-memory caches ----------
 const historyCache = new Map(); // symbol -> { fetchedAt, series, dividends }
 const exposureCache = new Map(); // symbol -> { fetchedAt, data }
@@ -273,7 +282,10 @@ app.get('/api/compare', async (req, res) => {
     const commonStart = Math.max(...earliestDates);
 
     const now = Date.now();
-    const startTs = RANGE_SPECS[range] != null ? subtractCalendar(now, RANGE_SPECS[range]) : commonStart; // max-common
+    let startTs;
+    if (range === 'ytd') startTs = startOfYear(now);
+    else if (RANGE_SPECS[range] != null) startTs = subtractCalendar(now, RANGE_SPECS[range]);
+    else startTs = commonStart; // max-common
 
     const results = {};
     for (const sym of validSymbols) {
