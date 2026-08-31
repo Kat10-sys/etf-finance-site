@@ -42,6 +42,14 @@ const RANGE_SPECS = {
 
 function subtractCalendar(fromMs, { days = 0, months = 0, years = 0 }) {
   const d = new Date(fromMs);
+  // Normalize to UTC midnight first. Otherwise this inherits whatever
+  // time-of-day the request happens to run at, and different data sources
+  // timestamp their daily bars differently (Yahoo stamps ~13:30 UTC;
+  // manually-captured issuer data here is stamped at exact UTC midnight)
+  // — so the same "1 Month" request could include or exclude a boundary
+  // day's data point depending purely on the wall-clock second it ran,
+  // and inconsistently between tickers in the same comparison.
+  d.setUTCHours(0, 0, 0, 0);
   d.setUTCFullYear(d.getUTCFullYear() - years);
   d.setUTCMonth(d.getUTCMonth() - months);
   d.setUTCDate(d.getUTCDate() - days);
