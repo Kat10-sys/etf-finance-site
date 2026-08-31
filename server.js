@@ -269,10 +269,13 @@ app.get('/api/compare', async (req, res) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Yahoo's crumb-authenticated endpoints (needed for sector/holdings data)
-// return 429 fairly often from shared/cloud-hosting IP ranges. These are
-// sometimes transient (proxy congestion) rather than a hard block, so retry
-// a couple of times with backoff before giving up.
-async function quoteSummaryWithRetry(symbol, options, attempts = 3) {
+// return 429 fairly often from shared/cloud-hosting IP ranges — but this
+// appears to be a short burst-limit rather than a hard IP ban: once any
+// request gets through, yahoo-finance2 caches the crumb in-memory for the
+// life of the process, and every subsequent call reuses it instantly. So
+// it's worth retrying fairly persistently on a 429 rather than giving up
+// quickly, since success on any attempt fixes things for everyone after.
+async function quoteSummaryWithRetry(symbol, options, attempts = 5) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -280,7 +283,7 @@ async function quoteSummaryWithRetry(symbol, options, attempts = 3) {
     } catch (e) {
       lastErr = e;
       if (!/429/.test(e.message) || i === attempts - 1) throw e;
-      await sleep(500 * (i + 1));
+      await sleep(1000 * Math.pow(2, i)); // 1s, 2s, 4s, 8s
     }
   }
   throw lastErr;
@@ -402,4 +405,11 @@ function humanizeSector(key) {
 
 app.listen(PORT, () => {
   console.log(`ETF finance site running at http://localhost:${PORT}`);
+
+  // Negotiate and cache a Yahoo crumb in the background at startup, so the
+  // (sometimes flaky, retried) negotiation happens before a real visitor
+  // needs exposure data rather than during their first request.
+  quoteSummaryWithRetry('AAPL', { modules: ['price'] }, 5)
+    .then(() => console.log('[startup] Yahoo crumb warmed successfully'))
+    .catch((e) => console.error(`[startup] Yahoo crumb warm-up failed: ${e.message}`));
 });
