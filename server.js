@@ -245,6 +245,11 @@ function computeMetrics(history, startTs, endTs) {
   }
   const totalReturnDRIP = curve[curve.length - 1].totalReturnDRIP;
 
+  // CAGR = (1 + cumulative return) ^ (1 / years) - 1. Years uses a 365.25
+  // day-count (accounts for leap years), matching standard practice.
+  const years = (endPoint.date - startPoint.date) / (365.25 * DAY_MS);
+  const cagr = (cumulativeReturn) => (years > 0 ? Math.pow(1 + cumulativeReturn, 1 / years) - 1 : null);
+
   return {
     insufficientData: false,
     startDate: startPoint.date,
@@ -254,6 +259,9 @@ function computeMetrics(history, startTs, endTs) {
     priceReturn,
     dividendPlusCash,
     totalReturnDRIP,
+    priceReturnCAGR: cagr(priceReturn),
+    dividendPlusCashCAGR: cagr(dividendPlusCash),
+    totalReturnDRIPCAGR: cagr(totalReturnDRIP),
     dividendSum,
     curve,
   };

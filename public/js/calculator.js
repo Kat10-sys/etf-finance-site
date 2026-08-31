@@ -122,6 +122,14 @@
     return `<span class="${cls}">${sign}${pct.toFixed(2)}%</span>`;
   }
 
+  function formatPercentWithCAGR(value, cagr) {
+    const cumulative = formatPercent(value);
+    if (cagr == null || Number.isNaN(cagr)) return cumulative;
+    const cagrPct = cagr * 100;
+    const sign = cagrPct >= 0 ? '+' : '';
+    return `${cumulative}<div class="cagr-sub">${sign}${cagrPct.toFixed(2)}% CAGR</div>`;
+  }
+
   function formatDate(ts) {
     return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
@@ -236,9 +244,9 @@
         tr.innerHTML = `
           <td class="symbol-cell"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</td>
           <td>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</td>
-          <td>${formatPercent(r.priceReturn)}</td>
-          <td>${formatPercent(r.dividendPlusCash)}</td>
-          <td>${formatPercent(r.totalReturnDRIP)}</td>
+          <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR)}</td>
+          <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR)}</td>
+          <td>${formatPercentWithCAGR(r.totalReturnDRIP, r.totalReturnDRIPCAGR)}</td>
         `;
       }
       resultsTableBody.appendChild(tr);

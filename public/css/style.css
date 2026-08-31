@@ -284,6 +284,12 @@ table.results-table td.symbol-cell {
 }
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }
+.cagr-sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
 
 .exposure-grid {
   display: grid;
