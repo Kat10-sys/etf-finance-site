@@ -5,6 +5,7 @@
     tickers: [],
     range: 'max-common',
     metric: 'totalReturnDRIP',
+    currency: 'native',
     lastResults: null,
   };
 
@@ -25,9 +26,25 @@
   const rangeMeta = document.getElementById('rangeMeta');
   const rangeButtons = document.querySelectorAll('.range-btn');
   const metricButtons = document.querySelectorAll('.metric-btn');
+  const currencyButtons = document.querySelectorAll('.currency-btn');
+  const copyLinkBtn = document.getElementById('copyLinkBtn');
 
   let returnChart = null;
   const pieCharts = {};
+  const pieDataCache = {}; // symbol -> last successful /api/exposure response, for re-rendering on theme change
+
+  // Chart.js renders to canvas, so it doesn't pick up CSS variable changes
+  // automatically — these need to be read and re-applied whenever the
+  // theme toggles.
+  function chartTheme() {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+      text: dark ? '#e2e8f0' : '#1e293b',
+      muted: dark ? '#94a3b8' : '#64748b',
+      grid: dark ? '#26334a' : '#eef2f6',
+      cardBg: dark ? '#131c2e' : '#ffffff',
+    };
+  }
 
   function colorFor(symbol) {
     const idx = state.tickers.indexOf(symbol);
@@ -57,12 +74,14 @@
     }
     state.tickers.push(val);
     renderChips();
+    updateURL();
     showStatus('');
   }
 
   function removeTicker(sym) {
     state.tickers = state.tickers.filter((t) => t !== sym);
     renderChips();
+    updateURL();
   }
 
   function renderChips() {
@@ -99,6 +118,7 @@
       rangeButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.range = btn.dataset.range;
+      updateURL();
       if (state.lastResults) runCompare();
     });
   });
@@ -110,9 +130,83 @@
       metricButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.metric = btn.dataset.metric;
+      updateURL();
       if (state.lastResults) renderChart(state.lastResults.results);
     });
   });
+
+  currencyButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currencyButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.currency = btn.dataset.currency;
+      updateURL();
+      if (state.lastResults) runCompare();
+    });
+  });
+
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener('click', async () => {
+      updateURL();
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        showStatus('Link copied to clipboard.');
+      } catch (e) {
+        showStatus(window.location.href);
+      }
+    });
+  }
+
+  window.addEventListener('themechange', () => {
+    if (!state.lastResults) return;
+    renderChart(state.lastResults.results);
+    state.tickers.forEach((sym) => {
+      renderPie(`sector-${sym}`, pieDataCache[sym]?.sectorWeightings);
+      renderPie(`geo-${sym}`, pieDataCache[sym]?.geoWeightings);
+    });
+  });
+
+  // ---------- shareable URL ----------
+  function updateURL() {
+    const params = new URLSearchParams();
+    if (state.tickers.length) params.set('symbols', state.tickers.join(','));
+    params.set('range', state.range);
+    if (state.metric !== 'totalReturnDRIP') params.set('metric', state.metric);
+    if (state.currency !== 'native') params.set('currency', state.currency);
+    const qs = params.toString();
+    const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, '', newUrl);
+  }
+
+  function restoreFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const symbols = (params.get('symbols') || '')
+      .split(',')
+      .map((s) => normalizeTicker(s))
+      .filter((s) => isValidTicker(s));
+    state.tickers = symbols.slice(0, 8);
+
+    const range = params.get('range');
+    if (range) {
+      state.range = range;
+      rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
+    }
+
+    const metric = params.get('metric');
+    if (metric && METRIC_LABELS[metric]) {
+      state.metric = metric;
+      metricButtons.forEach((b) => b.classList.toggle('active', b.dataset.metric === metric));
+    }
+
+    const currency = params.get('currency');
+    if (currency === 'CAD' || currency === 'USD') {
+      state.currency = currency;
+      currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
+    }
+
+    renderChips();
+    if (state.tickers.length) runCompare();
+  }
 
   function formatPercent(value) {
     if (value == null || Number.isNaN(value)) return '—';
@@ -139,7 +233,7 @@
     compareBtn.disabled = true;
     showStatus('Fetching price and dividend history…');
     try {
-      const params = new URLSearchParams({ symbols: state.tickers.join(','), range: state.range });
+      const params = new URLSearchParams({ symbols: state.tickers.join(','), range: state.range, currency: state.currency });
       const res = await fetch(`/api/compare?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed.');
@@ -147,12 +241,14 @@
       state.lastResults = data;
       resultsSection.style.display = 'block';
 
+      const problems = [];
       if (data.fetchErrors && Object.keys(data.fetchErrors).length) {
-        const msgs = Object.entries(data.fetchErrors).map(([s, m]) => `${s}: ${m}`).join(' · ');
-        showStatus(`Some tickers failed to load — ${msgs}`, true);
-      } else {
-        showStatus('');
+        problems.push(...Object.entries(data.fetchErrors).map(([s, m]) => `${s}: ${m}`));
       }
+      if (data.fxErrors && Object.keys(data.fxErrors).length) {
+        problems.push(...Object.entries(data.fxErrors).map(([pair, m]) => `${pair} exchange rate: ${m}`));
+      }
+      showStatus(problems.length ? `Some data failed to load — ${problems.join(' · ')}` : '', problems.length > 0);
 
       if (state.range === 'max-common') {
         rangeMeta.textContent = `Max common available data start: ${formatDate(data.commonStartDate)}`;
@@ -194,6 +290,7 @@
       };
     });
 
+    const theme = chartTheme();
     const ctx = document.getElementById('returnChart').getContext('2d');
     if (returnChart) returnChart.destroy();
     returnChart = new Chart(ctx, {
@@ -204,8 +301,8 @@
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          title: { display: true, text: METRIC_LABELS[metric], color: '#1e293b', font: { size: 14, weight: '600' } },
-          legend: { position: 'bottom' },
+          title: { display: true, text: METRIC_LABELS[metric], color: theme.text, font: { size: 14, weight: '600' } },
+          legend: { position: 'bottom', labels: { color: theme.text } },
           tooltip: {
             callbacks: {
               label: (item) => {
@@ -222,8 +319,8 @@
           },
         },
         scales: {
-          x: { ticks: { autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
-          y: { ticks: { callback: (v) => v + '%' } },
+          x: { ticks: { autoSkip: true, maxTicksLimit: 10, color: theme.muted }, grid: { display: false } },
+          y: { ticks: { callback: (v) => v + '%', color: theme.muted }, grid: { color: theme.grid } },
         },
       },
     });
@@ -277,6 +374,7 @@
       card.innerHTML = `
         <h3>${sym}</h3>
         <div class="exposure-sub">${r.name || ''}</div>
+        <div class="expense-ratio" id="expense-${sym}"></div>
         <div class="pie-row">
           <div class="pie-block">
             <h4>Sector</h4>
@@ -313,10 +411,18 @@
         showPieEmpty(geoCanvas, msg);
         return;
       }
+      pieDataCache[sym] = data;
       renderPie(`sector-${sym}`, data.sectorWeightings);
       renderPie(`geo-${sym}`, data.geoWeightings);
       if (data.geoIsEstimate && data.geoWeightings.length) {
         document.getElementById(`note-${sym}`).textContent = 'Geography estimated from top disclosed holdings.';
+      }
+      const expenseEl = document.getElementById(`expense-${sym}`);
+      if (expenseEl) {
+        expenseEl.textContent = data.expenseRatio != null
+          ? `Expense Ratio: ${(data.expenseRatio * 100).toFixed(2)}%`
+          : 'Expense Ratio: not available';
+        if (data.expenseRatio == null) expenseEl.classList.add('unavailable');
       }
     } catch (e) {
       showPieEmpty(sectorCanvas, 'Exposure data unavailable.');
@@ -340,6 +446,7 @@
       showPieEmpty(canvas, 'No data available.');
       return;
     }
+    const theme = chartTheme();
     const ctx = canvas.getContext('2d');
     if (pieCharts[canvasId]) pieCharts[canvasId].destroy();
     pieCharts[canvasId] = new Chart(ctx, {
@@ -350,19 +457,19 @@
           data: weightings.map((w) => +(w.weight * 100).toFixed(2)),
           backgroundColor: weightings.map((_, i) => COLORS[i % COLORS.length]),
           borderWidth: 1,
-          borderColor: '#fff',
+          borderColor: theme.cardBg,
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, color: theme.text } },
           tooltip: { callbacks: { label: (item) => `${item.label}: ${item.parsed}%` } },
         },
       },
     });
   }
 
-  renderChips();
+  restoreFromURL();
 })();

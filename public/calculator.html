@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <title>ETF Comparison Tool — Northbeam Finance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,6 +17,7 @@
       <div class="nav-links">
         <a href="/">Home</a>
         <a href="/calculator.html" class="active">ETF Comparison</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
       </div>
     </div>
   </nav>
@@ -49,8 +51,18 @@
         <div class="range-meta" id="rangeMeta"></div>
       </div>
 
-      <div style="margin-top:20px;">
+      <div class="currency-row">
+        <span class="currency-label">Show in:</span>
+        <div class="currency-buttons">
+          <button class="currency-btn active" data-currency="native">Native</button>
+          <button class="currency-btn" data-currency="CAD">CAD</button>
+          <button class="currency-btn" data-currency="USD">USD</button>
+        </div>
+      </div>
+
+      <div class="action-row">
         <button class="btn" id="compareBtn" disabled>Compare</button>
+        <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
       </div>
       <div class="status-line" id="statusLine"></div>
     </div>
@@ -94,6 +106,7 @@
     </div>
   </footer>
 
+  <script src="/js/theme-toggle.js"></script>
   <script src="/js/calculator.js"></script>
 </body>
 </html>

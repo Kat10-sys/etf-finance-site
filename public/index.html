@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <title>Northbeam Finance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,6 +16,7 @@
       <div class="nav-links">
         <a href="/" class="active">Home</a>
         <a href="/calculator.html">ETF Comparison</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
       </div>
     </div>
   </nav>
@@ -52,5 +54,7 @@
       Data sourced from Yahoo Finance. For informational purposes only — not investment advice.
     </div>
   </footer>
+
+  <script src="/js/theme-toggle.js"></script>
 </body>
 </html>

@@ -68,8 +68,61 @@ function startOfYear(fromMs) {
 // ---------- in-memory caches ----------
 const historyCache = new Map(); // symbol -> { fetchedAt, series, dividends }
 const exposureCache = new Map(); // symbol -> { fetchedAt, data }
+const fxCache = new Map(); // "USDCAD" -> { fetchedAt, series }
 const HISTORY_TTL = 10 * 60 * 1000;
 const EXPOSURE_TTL = 60 * 60 * 1000;
+const FX_TTL = 10 * 60 * 1000;
+
+// FX pairs (e.g. Yahoo's "USDCAD=X") use the same unauthenticated chart
+// endpoint as equity history, so currency conversion doesn't depend on the
+// flaky crumb-authenticated endpoint at all.
+async function fetchFXSeries(fromCurrency, toCurrency) {
+  const pair = `${fromCurrency}${toCurrency}`;
+  const cached = fxCache.get(pair);
+  if (cached && Date.now() - cached.fetchedAt < FX_TTL) return cached.series;
+
+  const period1 = Math.floor(new Date('1990-01-01T00:00:00Z').getTime() / 1000);
+  const period2 = Math.floor(Date.now() / 1000);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${pair}=X?period1=${period1}&period2=${period2}&interval=1d`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error(`FX rate request failed for ${pair} (${res.status})`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result || !result.timestamp) throw new Error(`No FX data for ${pair}`);
+
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  const series = [];
+  for (let i = 0; i < result.timestamp.length; i++) {
+    if (closes[i] == null) continue;
+    series.push({ date: result.timestamp[i] * 1000, rate: closes[i] });
+  }
+  series.sort((a, b) => a.date - b.date);
+
+  fxCache.set(pair, { fetchedAt: Date.now(), series });
+  return series;
+}
+
+// Nearest known rate at-or-before a date (FX trades ~24/5, so this rarely
+// needs to look far back); falls back to the earliest available rate for
+// dates before the series starts.
+function rateAt(fxSeries, ts) {
+  let match = null;
+  for (const p of fxSeries) {
+    if (p.date <= ts) match = p;
+    else break;
+  }
+  return (match || fxSeries[0])?.rate ?? 1;
+}
+
+// Returns a new history-shaped object with prices/dividends converted to
+// the target currency — computeMetrics itself stays currency-agnostic.
+function convertHistoryCurrency(history, fxSeries) {
+  return {
+    ...history,
+    series: history.series.map((p) => ({ date: p.date, close: p.close * rateAt(fxSeries, p.date) })),
+    dividends: history.dividends.map((d) => ({ date: d.date, amount: d.amount * rateAt(fxSeries, d.date) })),
+  };
+}
 
 function normalizeSymbol(raw) {
   return String(raw || '').trim().toUpperCase();
@@ -310,13 +363,58 @@ app.get('/api/compare', async (req, res) => {
     else if (RANGE_SPECS[range] != null) startTs = subtractCalendar(now, RANGE_SPECS[range]);
     else startTs = commonStart; // max-common
 
+    // Optional currency normalization: 'native' (default) leaves each
+    // ticker in its reported currency; 'CAD'/'USD' converts every ticker
+    // into that currency using historical FX rates, so a USD/CAD mix (e.g.
+    // VOO vs VFV.TO) can be compared without FX movement looking like a
+    // performance difference.
+    const targetCurrency = ['CAD', 'USD'].includes(req.query.currency) ? req.query.currency : null;
+    const fxErrors = {};
+    const nativeCurrencies = {}; // symbol -> its original reported currency
+    const displayCurrencies = {}; // symbol -> currency actually used for its numbers below
+    for (const sym of validSymbols) {
+      nativeCurrencies[sym] = histories[sym].currency;
+      displayCurrencies[sym] = histories[sym].currency;
+    }
+
+    if (targetCurrency) {
+      const neededPairs = new Set();
+      for (const sym of validSymbols) {
+        const native = nativeCurrencies[sym];
+        if (native && native !== targetCurrency) neededPairs.add(`${native}${targetCurrency}`);
+      }
+      const fxSeriesByPair = {};
+      await Promise.all(
+        Array.from(neededPairs).map(async (pair) => {
+          try {
+            fxSeriesByPair[pair] = await fetchFXSeries(pair.slice(0, 3), pair.slice(3));
+          } catch (e) {
+            fxErrors[pair] = e.message;
+          }
+        })
+      );
+      for (const sym of validSymbols) {
+        const native = nativeCurrencies[sym];
+        if (!native || native === targetCurrency) continue;
+        const fxSeries = fxSeriesByPair[`${native}${targetCurrency}`];
+        if (fxSeries) {
+          histories[sym] = convertHistoryCurrency(histories[sym], fxSeries);
+          displayCurrencies[sym] = targetCurrency;
+        }
+        // if the FX fetch failed, displayCurrencies[sym] stays native — we
+        // fall back to showing that ticker in its own currency rather than
+        // silently mislabeling unconverted numbers as the target currency.
+      }
+    }
+
     const results = {};
     for (const sym of validSymbols) {
       const metrics = computeMetrics(histories[sym], startTs, now);
       results[sym] = {
         symbol: sym,
         name: histories[sym].longName,
-        currency: histories[sym].currency,
+        currency: displayCurrencies[sym],
+        nativeCurrency: nativeCurrencies[sym],
         exchange: histories[sym].fullExchangeName,
         earliestAvailable: histories[sym].series[0].date,
         dataGapNote: histories[sym].dataGapNote,
@@ -329,8 +427,10 @@ app.get('/api/compare', async (req, res) => {
       requestedStart: startTs,
       commonStartDate: commonStart,
       asOf: now,
+      currency: targetCurrency || 'native',
       results,
       fetchErrors,
+      fxErrors,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -441,6 +541,11 @@ app.get('/api/exposure', async (req, res) => {
       symbol,
       name: quoteSummary.price?.longName || quoteSummary.price?.shortName || symbol,
       category: quoteSummary.fundProfile?.categoryName || null,
+      // Yahoo reports a literal 0 (not null/undefined) for some non-US
+      // funds it doesn't have real expense-ratio data for — e.g. XEQT.TO's
+      // actual MER is ~0.20%, not 0%. Treat 0 as "not reported" rather than
+      // display a number we know is a placeholder, not a fact.
+      expenseRatio: quoteSummary.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio || null,
       sectorWeightings,
       holdings,
       geoWeightings,
