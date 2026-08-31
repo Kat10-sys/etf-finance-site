@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<title>Investment Growth Calculator — Northbeam Finance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="brand">Northbeam <span>Finance</span></a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/calculator.html">ETF Comparison</a>
+        <a href="/growth-calculator.html" class="active">Growth Calculator</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Investment Growth Calculator</h1>
+      <p>See how a lump sum plus regular contributions could grow over time, assuming a steady annual return.</p>
+    </div>
+
+    <div class="panel">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Initial investment</span>
+          <input type="number" id="initialInput" value="10000" min="0" step="100" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Years to grow</span>
+          <input type="number" id="yearsInput" value="20" min="1" max="60" step="1" inputmode="numeric">
+        </label>
+        <label class="form-field">
+          <span>Expected annual return</span>
+          <input type="number" id="returnInput" value="6" min="-20" max="30" step="0.1" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Contribution amount</span>
+          <input type="number" id="contributionInput" value="200" min="0" step="10" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Contribution frequency</span>
+          <select id="frequencyInput">
+            <option value="12">Monthly</option>
+            <option value="1">Annually</option>
+          </select>
+        </label>
+        <label class="form-field">
+          <span>Inflation rate</span>
+          <input type="number" id="inflationInput" value="2" min="0" max="15" step="0.1" inputmode="decimal">
+        </label>
+      </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="increaseWithInflation">
+        <span>Increase contribution amount with inflation each year</span>
+      </label>
+
+      <div class="currency-row">
+        <span class="currency-label">Show results in:</span>
+        <div class="currency-buttons">
+          <button class="currency-btn active" data-mode="nominal">Future dollars</button>
+          <button class="currency-btn" data-mode="real">Today's dollars</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="summaryPanel">
+      <div class="growth-headline" id="growthHeadline"></div>
+      <div class="growth-stats" id="growthStats"></div>
+    </div>
+
+    <div class="panel chart-card">
+      <div class="chart-wrap"><canvas id="growthChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="table-scroll">
+        <table class="results-table" id="growthTable">
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Contributions to date</th>
+              <th>Growth to date</th>
+              <th>Balance</th>
+            </tr>
+          </thead>
+          <tbody id="growthTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      Hypothetical projection for informational purposes only — assumes a constant rate of return, which real investments do not provide. Not investment advice.
+    </div>
+  </footer>
+
+  <script src="/js/theme-toggle.js"></script>
+  <script src="/js/growth-calculator.js"></script>
+</body>
+</html>
