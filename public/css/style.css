@@ -272,6 +272,7 @@ table.results-table td.symbol-cell {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
 }
+.exposure-card { min-width: 0; }
 .exposure-card h3 {
   margin: 0 0 2px;
   font-size: 1rem;
@@ -287,6 +288,9 @@ table.results-table td.symbol-cell {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+.pie-block {
+  min-width: 0;
+}
 .pie-block h4 {
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -295,7 +299,8 @@ table.results-table td.symbol-cell {
   margin: 0 0 8px;
   text-align: center;
 }
-.pie-block .pie-wrap { position: relative; height: 190px; width: 100%; }
+.pie-block .pie-wrap { position: relative; height: 190px; width: 100%; min-width: 0; }
+.pie-block canvas { max-width: 100%; }
 .pie-empty {
   font-size: 0.8rem;
   color: var(--text-muted);

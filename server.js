@@ -3,7 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const YahooFinance = require('yahoo-finance2').default;
 
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+// Yahoo's crumb endpoint has been observed to rate-limit yahoo-finance2's
+// self-identifying User-Agent more aggressively than a browser-like one,
+// especially from shared/cloud-hosting IPs. See:
+// https://github.com/gadicc/yahoo-finance2/issues/977
+const yahooFinance = new YahooFinance({
+  suppressNotices: ['yahooSurvey'],
+  fetchOptions: {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    },
+  },
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
