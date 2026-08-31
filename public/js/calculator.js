@@ -235,14 +235,14 @@
       const r = results[sym];
       const tr = document.createElement('tr');
       if (!r) {
-        tr.innerHTML = `<td class="symbol-cell"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</td>
+        tr.innerHTML = `<td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td colspan="4" style="text-align:left;color:var(--text-muted)">No data returned.</td>`;
       } else if (r.insufficientData) {
-        tr.innerHTML = `<td class="symbol-cell"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</td>
+        tr.innerHTML = `<td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td colspan="4" style="text-align:left;color:var(--text-muted)">Not enough history in this window (data available from ${formatDate(r.earliestAvailable)}).</td>`;
       } else {
         tr.innerHTML = `
-          <td class="symbol-cell"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</td>
+          <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</td>
           <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR)}</td>
           <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR)}</td>

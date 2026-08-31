@@ -278,6 +278,8 @@ table.results-table thead th {
 table.results-table td.symbol-cell {
   font-weight: 700;
   color: var(--navy);
+}
+table.results-table .symbol-inner {
   display: flex;
   align-items: center;
   gap: 8px;
