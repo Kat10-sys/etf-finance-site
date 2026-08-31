@@ -254,6 +254,26 @@ app.get('/api/compare', async (req, res) => {
   }
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Yahoo's crumb-authenticated endpoints (needed for sector/holdings data)
+// return 429 fairly often from shared/cloud-hosting IP ranges. These are
+// sometimes transient (proxy congestion) rather than a hard block, so retry
+// a couple of times with backoff before giving up.
+async function quoteSummaryWithRetry(symbol, options, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await yahooFinance.quoteSummary(symbol, options);
+    } catch (e) {
+      lastErr = e;
+      if (!/429/.test(e.message) || i === attempts - 1) throw e;
+      await sleep(500 * (i + 1));
+    }
+  }
+  throw lastErr;
+}
+
 app.get('/api/exposure', async (req, res) => {
   try {
     const symbol = normalizeSymbol(req.query.symbol);
@@ -266,10 +286,11 @@ app.get('/api/exposure', async (req, res) => {
 
     let quoteSummary;
     try {
-      quoteSummary = await yahooFinance.quoteSummary(symbol, {
+      quoteSummary = await quoteSummaryWithRetry(symbol, {
         modules: ['topHoldings', 'fundProfile', 'price'],
       });
     } catch (e) {
+      console.error(`[exposure] quoteSummary failed for ${symbol}: ${e.message}`);
       return res.status(502).json({
         error: 'Exposure data temporarily unavailable from the data provider.',
         detail: e.message,
