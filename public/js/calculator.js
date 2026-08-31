@@ -224,14 +224,17 @@
     });
   }
 
-  function renderExposures(results) {
+  async function renderExposures(results) {
     exposureGrid.innerHTML = '';
     Object.values(pieCharts).forEach((c) => c && c.destroy());
 
-    state.tickers.forEach((sym) => {
+    const symbolsToLoad = state.tickers.filter((sym) => {
       const r = results[sym];
-      if (!r || r.insufficientData) return;
+      return r && !r.insufficientData;
+    });
 
+    symbolsToLoad.forEach((sym) => {
+      const r = results[sym];
       const card = document.createElement('div');
       card.className = 'panel exposure-card';
       card.innerHTML = `
@@ -250,8 +253,15 @@
         <div class="estimate-note" id="note-${sym}"></div>
       `;
       exposureGrid.appendChild(card);
-      loadExposure(sym);
     });
+
+    // Loaded one at a time (not Promise.all) so we don't fire a burst of
+    // concurrent requests at once — the backend's free-tier hosting has
+    // limited concurrency, and Yahoo's crumb-authenticated endpoint is more
+    // likely to rate-limit a simultaneous burst than sequential requests.
+    for (const sym of symbolsToLoad) {
+      await loadExposure(sym);
+    }
   }
 
   async function loadExposure(sym) {
