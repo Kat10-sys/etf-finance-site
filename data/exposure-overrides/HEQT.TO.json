@@ -1,0 +1,18 @@
+{
+  "symbol": "HEQT.TO",
+  "asOf": "2026-07-31",
+  "source": "https://www.globalx.ca/product/heqt — issuer-published \"Top Geographic Exposure\" table for this fund directly.",
+  "note": "Issuer-published country breakdown (Global X's own \"Top Geographic Exposure\" table), more granular than the sector-holdings-based estimate this app derives for most funds.",
+  "geoWeightings": [
+    { "label": "United States", "weight": 0.4537 },
+    { "label": "Canada", "weight": 0.2078 },
+    { "label": "Japan", "weight": 0.0611 },
+    { "label": "United Kingdom", "weight": 0.0353 },
+    { "label": "Switzerland", "weight": 0.0234 },
+    { "label": "France", "weight": 0.0228 },
+    { "label": "Taiwan", "weight": 0.0227 },
+    { "label": "Germany", "weight": 0.0226 },
+    { "label": "South Korea", "weight": 0.0177 },
+    { "label": "Australia", "weight": 0.0174 }
+  ]
+}
