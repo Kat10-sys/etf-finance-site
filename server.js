@@ -162,6 +162,34 @@ if (fs.existsSync(exposureOverridesDir)) {
   }
 }
 
+// Historical Consumer Price Index, monthly, for converting nominal backtest
+// dollars into today's purchasing power. Sourced directly from each
+// currency's official statistics agency (US: BLS series CUUR0000SA0,
+// CPI-U city average, all items; Canada: StatCan table 18-10-0004-01,
+// all-items CPI, vector v41690973), not re-derived or estimated. See
+// data/cpi/README.md for how to refresh these.
+const cpiSeries = {};
+const cpiDir = path.join(__dirname, 'data', 'cpi');
+for (const currency of ['US', 'CA']) {
+  const file = path.join(cpiDir, `${currency}.json`);
+  if (fs.existsSync(file)) {
+    cpiSeries[currency] = JSON.parse(fs.readFileSync(file, 'utf8')).sort((a, b) => a.date - b.date);
+  }
+}
+
+function cpiForCurrency(currency) {
+  return cpiSeries[currency === 'CAD' ? 'CA' : 'US'] || null;
+}
+
+// Nearest available month at-or-before ts, falling back to the earliest
+// point for dates older than the series (e.g. a ticker's inception predating
+// 1990) rather than returning null and losing the deflation entirely.
+function cpiIndexAt(currency, ts) {
+  const series = cpiForCurrency(currency);
+  if (!series || series.length === 0) return null;
+  return findOnOrBefore(series, ts)?.index ?? series[0].index;
+}
+
 async function fetchHistory(symbol) {
   const cached = historyCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt < HISTORY_TTL) return cached;
@@ -727,22 +755,43 @@ app.get('/api/backtest', async (req, res) => {
     for (const sym of validSymbols) startPrices[sym] = priceOnOrBefore(sym, timeline[0]);
     for (const sym of validSymbols) units[sym] = (initial * weights[sym]) / startPrices[sym];
 
+    // CPI as of right now, used to restate every cash flow in today's
+    // purchasing power as it happens -- computed once up front since it
+    // doesn't depend on simulation state, only on the wall-clock date.
+    const latestCpi = cpiIndexAt(targetCurrency, Date.now());
+    function cpiRatioToToday(ts) {
+      const cpiThen = cpiIndexAt(targetCurrency, ts);
+      return latestCpi != null && cpiThen ? latestCpi / cpiThen : 1;
+    }
+
     // Tracks money actually left invested in each ticker: initial + its
     // share of each contribution, minus its share of each withdrawal.
     // Rebalancing moves units between tickers but is not a cash flow, so it
     // never touches this -- that's what lets each ticker's
     // "value - netInvestedBySymbol" (the per-holding growth reported below)
     // sum exactly to the portfolio's total growth in every combination of
-    // rebalancing and retirement-phase withdrawals.
+    // rebalancing and retirement-phase withdrawals. The "Real" variant
+    // mirrors it exactly, except each amount is restated in today's dollars
+    // (via cpiRatioToToday) at the moment it's added, rather than left in
+    // the dollars of whatever year it happened in.
     const netInvestedBySymbol = {};
-    for (const sym of validSymbols) netInvestedBySymbol[sym] = initial * weights[sym];
+    const netInvestedRealBySymbol = {};
+    const startRatio = cpiRatioToToday(timeline[0]);
+    for (const sym of validSymbols) {
+      netInvestedBySymbol[sym] = initial * weights[sym];
+      netInvestedRealBySymbol[sym] = initial * weights[sym] * startRatio;
+    }
 
     let totalContributed = initial;
+    let totalContributedReal = initial * startRatio;
     let totalWithdrawn = 0;
+    let totalWithdrawnReal = 0;
     let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
     let nextRebalanceDate = rebalance === 'annual' ? addPeriod(timeline[0], 'annually') : Infinity;
     let peakValue = initial;
     let maxDrawdown = 0;
+    let peakValueReal = initial * startRatio;
+    let maxDrawdownReal = 0;
     const cashflows = [{ date: timeline[0], amount: -initial }];
     const dailyCurve = [];
 
@@ -779,12 +828,14 @@ app.get('/api/backtest', async (req, res) => {
           break;
         }
         totalContributed += contribution;
+        totalContributedReal += contribution * cpiRatioToToday(nextContribDate);
         cashflows.push({ date: nextContribDate, amount: -contribution });
         for (const sym of validSymbols) {
           const price = priceOnOrBefore(sym, nextContribDate);
           if (price) {
             units[sym] += (contribution * weights[sym]) / price;
             netInvestedBySymbol[sym] += contribution * weights[sym];
+            netInvestedRealBySymbol[sym] += contribution * weights[sym] * cpiRatioToToday(nextContribDate);
           }
         }
         nextContribDate = addPeriod(nextContribDate, frequency);
@@ -820,16 +871,19 @@ app.get('/api/backtest', async (req, res) => {
         const actualWithdrawal = Math.min(installment, totalValueNow);
 
         if (totalValueNow > 0 && actualWithdrawal > 0) {
+          const withdrawalRatio = cpiRatioToToday(nextWithdrawalDate);
           for (const sym of validSymbols) {
             const shareOfPortfolio = bySymbolNow[sym] / totalValueNow;
             const symWithdrawal = actualWithdrawal * shareOfPortfolio;
             const price = priceOnOrBefore(sym, nextWithdrawalDate);
             if (price) units[sym] -= symWithdrawal / price;
             netInvestedBySymbol[sym] -= symWithdrawal;
+            netInvestedRealBySymbol[sym] -= symWithdrawal * withdrawalRatio;
           }
         }
 
         totalWithdrawn += actualWithdrawal;
+        totalWithdrawnReal += actualWithdrawal * cpiRatioToToday(nextWithdrawalDate);
         cashflows.push({ date: nextWithdrawalDate, amount: actualWithdrawal });
 
         if (actualWithdrawal < installment - 1e-6) {
@@ -849,7 +903,24 @@ app.get('/api/backtest', async (req, res) => {
       const drawdown = peakValue > 0 ? (peakValue - value) / peakValue : 0;
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
 
-      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed, withdrawn: totalWithdrawn, bySymbol });
+      // Tracked separately from the nominal drawdown above -- deflating the
+      // peak and trough by different CPI ratios (since they fall on
+      // different dates) can shift a dip's real-terms percentage away from
+      // its nominal one, even though both use the same underlying values.
+      const valueReal = value * cpiRatioToToday(day);
+      if (valueReal > peakValueReal) peakValueReal = valueReal;
+      const drawdownReal = peakValueReal > 0 ? (peakValueReal - valueReal) / peakValueReal : 0;
+      if (drawdownReal > maxDrawdownReal) maxDrawdownReal = drawdownReal;
+
+      dailyCurve.push({
+        date: dayFloor,
+        value,
+        contributed: totalContributed,
+        contributedReal: totalContributedReal,
+        withdrawn: totalWithdrawn,
+        withdrawnReal: totalWithdrawnReal,
+        bySymbol,
+      });
     }
 
     const finalEntry = dailyCurve[dailyCurve.length - 1];
@@ -873,10 +944,38 @@ app.get('/api/backtest', async (req, res) => {
     }
     if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
 
+    // Attach a CPI index to each point so the frontend can convert nominal
+    // dollars to today's purchasing power without a second round trip.
+    for (const point of monthlyCurve) {
+      point.cpi = cpiIndexAt(targetCurrency, point.date);
+    }
+
+    // A genuine real (inflation-adjusted) annualized return, not just the
+    // nominal XIRR relabeled -- every cash flow is restated in today's
+    // dollars using the CPI at its own date before re-running the same
+    // money-weighted-return calculation.
+    let annualizedReturnReal = null;
+    if (latestCpi != null) {
+      const realCashflows = cashflows.map((cf) => ({ date: cf.date, amount: cf.amount * cpiRatioToToday(cf.date) }));
+      annualizedReturnReal = computeXIRR(realCashflows);
+    }
+
+    const endingValueRatio = cpiRatioToToday(finalEntry.date);
     const bySymbolSummary = validSymbols.map((sym) => {
       const endingValue = finalEntry.bySymbol[sym];
       const netInvested = netInvestedBySymbol[sym];
-      return { symbol: sym, weight: weights[sym], contributed: netInvested, endingValue, growth: endingValue - netInvested };
+      const endingValueReal = endingValue * endingValueRatio;
+      const netInvestedReal = netInvestedRealBySymbol[sym];
+      return {
+        symbol: sym,
+        weight: weights[sym],
+        contributed: netInvested,
+        endingValue,
+        growth: endingValue - netInvested,
+        contributedReal: netInvestedReal,
+        endingValueReal,
+        growthReal: endingValueReal - netInvestedReal,
+      };
     });
 
     res.json({
@@ -891,18 +990,27 @@ app.get('/api/backtest', async (req, res) => {
       frequency,
       rebalance,
       totalContributed,
+      totalContributedReal,
       totalWithdrawn,
+      totalWithdrawnReal,
       endingValue: finalEntry.value,
+      endingValueReal: finalEntry.value * endingValueRatio,
       totalGrowth: finalEntry.value - totalContributed + totalWithdrawn,
+      totalGrowthReal: finalEntry.value * endingValueRatio - totalContributedReal + totalWithdrawnReal,
       annualizedReturn,
+      annualizedReturnReal,
       maxDrawdown,
+      maxDrawdownReal,
       curve: monthlyCurve,
       bySymbolSummary,
+      cpiAvailable: latestCpi != null,
+      latestCpi,
       retirement: hasRetirement
         ? {
             retireAfterYears,
             retirementDate,
             retirementValue,
+            retirementValueReal: retirementValue != null ? retirementValue * cpiRatioToToday(retirementDate) : null,
             annualWithdrawalInitial,
             withdrawalRate,
             withdrawalInflation,

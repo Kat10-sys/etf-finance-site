@@ -126,6 +126,15 @@
         </div>
       </div>
 
+      <div class="currency-row">
+        <span class="currency-label">Adjust for inflation:</span>
+        <div class="currency-buttons">
+          <button class="currency-btn active" data-dollar-mode="nominal">Nominal dollars</button>
+          <button class="currency-btn" data-dollar-mode="real">Real (today's dollars)</button>
+        </div>
+      </div>
+      <div class="hint">"Real" restates every figure in today's purchasing power using actual historical CPI (US or Canada, matching the currency above) — not a projection or assumed rate.</div>
+
       <div class="action-row">
         <button class="btn" id="runBtn" disabled>Run Backtest</button>
         <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
@@ -181,7 +190,7 @@
 
   <footer>
     <div class="container">
-      <strong>This page simulates historical performance, not future results.</strong> Figures are computed from actual past price and dividend data with dividends assumed reinvested, and do not account for taxes, trading fees, fund expense ratios, currency-conversion costs, or your personal financial situation. Rebalancing, contribution, and withdrawal timing are simplified assumptions and do not reflect the exact behavior of any real account. The retirement/withdrawal simulation replays a single historical sequence of returns for your chosen tickers and dates — it is not a Monte Carlo or "safe withdrawal rate" analysis across many possible scenarios, and a portfolio surviving (or not) in this one sequence says nothing about how it would fare starting on a different date. Past performance does not predict future returns. Nothing on this page recommends buying, selling, or holding any specific investment, savings rate, or withdrawal strategy, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making retirement or investment decisions.
+      <strong>This page simulates historical performance, not future results.</strong> Figures are computed from actual past price and dividend data with dividends assumed reinvested, and do not account for taxes, trading fees, fund expense ratios, currency-conversion costs, or your personal financial situation. Rebalancing, contribution, and withdrawal timing are simplified assumptions and do not reflect the exact behavior of any real account. "Real (today's dollars)" figures use official historical Consumer Price Index data (US Bureau of Labor Statistics for USD, Statistics Canada for CAD) to restate past dollar amounts in current purchasing power — this adjusts for general inflation only, not the specific cost of living of any individual. The retirement/withdrawal simulation replays a single historical sequence of returns for your chosen tickers and dates — it is not a Monte Carlo or "safe withdrawal rate" analysis across many possible scenarios, and a portfolio surviving (or not) in this one sequence says nothing about how it would fare starting on a different date. Past performance does not predict future returns. Nothing on this page recommends buying, selling, or holding any specific investment, savings rate, or withdrawal strategy, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making retirement or investment decisions.
     </div>
   </footer>
 

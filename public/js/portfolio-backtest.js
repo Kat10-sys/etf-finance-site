@@ -6,6 +6,7 @@
     range: 'max-common',
     currency: 'CAD',
     rebalance: 'annual',
+    dollarMode: 'nominal', // 'nominal' | 'real' -- display-only, no refetch needed
     customStart: '',
     customEnd: '',
     lastResults: null,
@@ -38,6 +39,7 @@
   const withdrawalFrequencyInput = document.getElementById('withdrawalFrequencyInput');
   const rebalanceButtons = document.querySelectorAll('[data-rebalance]');
   const currencyButtons = document.querySelectorAll('[data-currency]');
+  const dollarModeButtons = document.querySelectorAll('[data-dollar-mode]');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
   const backtestHeadline = document.getElementById('backtestHeadline');
   const backtestStats = document.getElementById('backtestStats');
@@ -242,6 +244,18 @@
     });
   });
 
+  dollarModeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      dollarModeButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.dollarMode = btn.dataset.dollarMode;
+      updateURL();
+      // Pure display transform of already-fetched results -- the real-dollar
+      // figures are already in the response, so no need to hit the API again.
+      if (state.lastResults) renderResults(state.lastResults);
+    });
+  });
+
   [initialInput, contributionInput, frequencyInput].forEach((el) => {
     el.addEventListener('change', () => {
       updateURL();
@@ -290,7 +304,7 @@
   }
 
   window.addEventListener('themechange', () => {
-    if (state.lastResults) renderChart(state.lastResults.curve, state.lastResults.symbols, state.lastResults.retirement);
+    if (state.lastResults) renderChart(state.lastResults);
   });
 
   // ---------- shareable URL ----------
@@ -307,6 +321,7 @@
     }
     params.set('currency', state.currency);
     params.set('rebalance', state.rebalance);
+    if (state.dollarMode === 'real') params.set('dollarMode', 'real');
     params.set('initial', initialInput.value || '0');
     params.set('contribution', contributionInput.value || '0');
     params.set('frequency', frequencyInput.value);
@@ -344,6 +359,12 @@
     if (currency === 'CAD' || currency === 'USD') {
       state.currency = currency;
       currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
+    }
+
+    const dollarMode = params.get('dollarMode');
+    if (dollarMode === 'real') {
+      state.dollarMode = 'real';
+      dollarModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.dollarMode === 'real'));
     }
 
     const rebalance = params.get('rebalance');
@@ -434,10 +455,7 @@
 
       rangeMeta.textContent = `${formatDate(data.startDate)} → ${formatDate(data.endDate)}`;
 
-      renderSummary(data);
-      renderHoldingTable(data.bySymbolSummary, data.retirement);
-      renderChart(data.curve, data.symbols, data.retirement);
-      renderTable(data.curve, data.symbols, data.retirement);
+      renderResults(data);
     } catch (e) {
       showStatus(e.message, true);
     } finally {
@@ -445,38 +463,53 @@
     }
   }
 
+  function renderResults(data) {
+    renderSummary(data);
+    renderHoldingTable(data);
+    renderChart(data);
+    renderTable(data);
+  }
+
   function renderSummary(data) {
-    const xirrText = data.annualizedReturn != null ? `${(data.annualizedReturn * 100).toFixed(2)}%` : 'n/a';
-    const ddText = `${(data.maxDrawdown * 100).toFixed(1)}%`;
+    const real = state.dollarMode === 'real';
+    const endingValue = real ? data.endingValueReal : data.endingValue;
+    const totalContributed = real ? data.totalContributedReal : data.totalContributed;
+    const totalWithdrawn = real ? data.totalWithdrawnReal : data.totalWithdrawn;
+    const totalGrowth = real ? data.totalGrowthReal : data.totalGrowth;
+    const annualizedReturn = real ? data.annualizedReturnReal : data.annualizedReturn;
+    const xirrText = annualizedReturn != null ? `${(annualizedReturn * 100).toFixed(2)}%` : 'n/a';
+    const maxDrawdown = real ? data.maxDrawdownReal : data.maxDrawdown;
+    const ddText = `${(maxDrawdown * 100).toFixed(1)}%`;
     const rebalanceText = data.rebalance === 'annual' ? 'annual rebalancing' : 'no rebalancing';
     const retirement = data.retirement;
+    const retirementValue = retirement ? (real ? retirement.retirementValueReal : retirement.retirementValue) : null;
 
     let headline;
     if (retirement) {
       const rateText = `${(retirement.withdrawalRate * 100).toFixed(1)}%`;
       if (retirement.depletedDate) {
-        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirement.retirementValue)}</strong> by retirement, then been <strong class="neg">fully depleted on ${formatDate(retirement.depletedDate)}</strong> withdrawing ${rateText} of the balance per year (inflation-adjusted).`;
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then been <strong class="neg">fully depleted on ${formatDate(retirement.depletedDate)}</strong> withdrawing ${rateText} of the balance per year (inflation-adjusted).`;
       } else {
-        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirement.retirementValue)}</strong> by retirement, then survived withdrawals of ${rateText} of the balance per year (inflation-adjusted), ending at <strong>${formatMoney(data.endingValue)}</strong>.`;
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then survived withdrawals of ${rateText} of the balance per year (inflation-adjusted), ending at <strong>${formatMoney(endingValue)}</strong>.`;
       }
     } else {
-      headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(data.endingValue)}</strong>, an annualized return of <strong>${xirrText}</strong>.`;
+      headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(endingValue)}</strong>, an annualized return of <strong>${xirrText}</strong>.`;
     }
     backtestHeadline.innerHTML = headline;
 
     const stats = [
-      { color: '#0d9488', label: 'Total contributed', value: formatMoney(data.totalContributed) },
+      { color: '#0d9488', label: 'Total contributed', value: formatMoney(totalContributed) },
     ];
     if (retirement) {
-      stats.push({ color: '#d97706', label: 'Total withdrawn', value: formatMoney(data.totalWithdrawn) });
+      stats.push({ color: '#d97706', label: 'Total withdrawn', value: formatMoney(totalWithdrawn) });
     }
-    stats.push({ color: '#2563eb', label: 'Investment growth', value: formatMoney(data.totalGrowth) });
+    stats.push({ color: '#2563eb', label: 'Investment growth', value: formatMoney(totalGrowth) });
     stats.push({ color: '#7c3aed', label: 'Annualized return (XIRR)', value: xirrText });
     stats.push({ color: '#dc2626', label: 'Max drawdown', value: ddText });
     if (retirement) {
       stats.push(retirement.depletedDate
         ? { color: '#dc2626', label: 'Depleted on', value: formatDate(retirement.depletedDate) }
-        : { color: '#059669', label: 'Balance at retirement', value: formatMoney(retirement.retirementValue) });
+        : { color: '#059669', label: 'Balance at retirement', value: formatMoney(retirementValue) });
     }
 
     backtestStats.innerHTML = stats.map((s) => `
@@ -487,7 +520,18 @@
     `).join('');
   }
 
-  function renderChart(curve, symbols, retirement) {
+  // In "real" mode, a curve point's dollar value is scaled by how much CPI
+  // has moved between that point's date and today (latestCpi) -- amounts
+  // already accumulated event-by-event in today's dollars (contributedReal,
+  // withdrawnReal) are used as-is instead, since re-scaling an already-real
+  // running total by today's ratio again would double-count the adjustment.
+  function pointRatio(p, data) {
+    return state.dollarMode === 'real' && p.cpi ? data.latestCpi / p.cpi : 1;
+  }
+
+  function renderChart(data) {
+    const { curve, symbols, retirement } = data;
+    const real = state.dollarMode === 'real';
     const theme = chartTheme();
     const labels = curve.map((p) => formatDate(p.date));
     const netInvestedLabel = retirement ? 'Net Invested (Contributed − Withdrawn)' : 'Total Contributed';
@@ -501,7 +545,7 @@
         datasets: [
           ...symbols.map((sym) => ({
             label: sym,
-            data: curve.map((p) => p.bySymbol[sym]),
+            data: curve.map((p) => p.bySymbol[sym] * pointRatio(p, data)),
             backgroundColor: colorFor(sym),
             stack: 's',
             order: 1,
@@ -509,7 +553,11 @@
           {
             type: 'line',
             label: netInvestedLabel,
-            data: curve.map((p) => p.contributed - (p.withdrawn || 0)),
+            data: curve.map((p) => {
+              const contributed = real ? p.contributedReal : p.contributed;
+              const withdrawn = (real ? p.withdrawnReal : p.withdrawn) || 0;
+              return contributed - withdrawn;
+            }),
             borderColor: theme.muted,
             backgroundColor: theme.muted,
             borderDash: [6, 4],
@@ -544,7 +592,9 @@
     });
   }
 
-  function renderTable(curve, symbols, retirement) {
+  function renderTable(data) {
+    const { curve, symbols, retirement } = data;
+    const real = state.dollarMode === 'real';
     backtestTableHead.innerHTML = `
       <tr>
         <th>Date</th>
@@ -557,36 +607,43 @@
     `;
     backtestTableBody.innerHTML = '';
     curve.forEach((p) => {
-      const withdrawn = p.withdrawn || 0;
-      const growth = p.value - p.contributed + withdrawn;
+      const value = p.value * pointRatio(p, data);
+      const contributed = real ? p.contributedReal : p.contributed;
+      const withdrawn = (real ? p.withdrawnReal : p.withdrawn) || 0;
+      const growth = value - contributed + withdrawn;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${formatDate(p.date)}</td>
-        ${symbols.map((sym) => `<td>${formatMoney(p.bySymbol[sym])}</td>`).join('')}
-        <td>${formatMoney(p.contributed)}</td>
+        ${symbols.map((sym) => `<td>${formatMoney(p.bySymbol[sym] * pointRatio(p, data))}</td>`).join('')}
+        <td>${formatMoney(contributed)}</td>
         ${retirement ? `<td>${formatMoney(withdrawn)}</td>` : ''}
         <td>${formatMoney(growth)}</td>
-        <td>${formatMoney(p.value)}</td>
+        <td>${formatMoney(value)}</td>
       `;
       backtestTableBody.appendChild(tr);
     });
   }
 
-  function renderHoldingTable(bySymbolSummary, retirement) {
+  function renderHoldingTable(data) {
+    const { bySymbolSummary, retirement } = data;
+    const real = state.dollarMode === 'real';
     document.getElementById('holdingContributedHeader').textContent = retirement ? 'Net Contributed' : 'Contributed';
     holdingTableBody.innerHTML = '';
     bySymbolSummary.forEach((h) => {
-      const growthPct = h.contributed > 0 ? (h.growth / h.contributed) * 100 : null;
-      const growthClass = h.growth >= 0 ? 'pos' : 'neg';
-      const sign = h.growth >= 0 ? '+' : '';
+      const contributed = real ? h.contributedReal : h.contributed;
+      const endingValue = real ? h.endingValueReal : h.endingValue;
+      const growth = real ? h.growthReal : h.growth;
+      const growthPct = contributed > 0 ? (growth / contributed) * 100 : null;
+      const growthClass = growth >= 0 ? 'pos' : 'neg';
+      const sign = growth >= 0 ? '+' : '';
       const growthPctText = growthPct != null ? ` (${sign}${growthPct.toFixed(1)}%)` : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(h.symbol)};display:inline-block"></span>${h.symbol}</span></td>
         <td>${(h.weight * 100).toFixed(1)}%</td>
-        <td>${formatMoney(h.contributed)}</td>
-        <td>${formatMoney(h.endingValue)}</td>
-        <td><span class="${growthClass}">${sign}${formatMoney(h.growth)}${growthPctText}</span></td>
+        <td>${formatMoney(contributed)}</td>
+        <td>${formatMoney(endingValue)}</td>
+        <td><span class="${growthClass}">${sign}${formatMoney(growth)}${growthPctText}</span></td>
       `;
       holdingTableBody.appendChild(tr);
     });
