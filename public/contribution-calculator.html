@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<title>TFSA & RRSP Contribution Room Calculator — Northbeam Finance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="brand">Northbeam <span>Finance</span></a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/calculator.html">ETF Comparison</a>
+        <a href="/growth-calculator.html">Growth Calculator</a>
+        <a href="/contribution-calculator.html" class="active">Contribution Room</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>TFSA &amp; RRSP Contribution Room Calculator</h1>
+      <p>Estimates your available room using published CRA dollar limits and the numbers you enter — not a substitute for your official CRA record.</p>
+    </div>
+
+    <div class="disclaimer-note" style="margin:20px 0;padding:16px;border:1px solid var(--border);border-radius:var(--radius);border-top:1px solid var(--border)">
+      <strong>This is an estimate, not your official contribution room.</strong> The CRA is the only authoritative source — sign in to <a href="https://www.canada.ca/en/revenue-agency/services/e-services/cra-login-services.html" target="_blank" rel="noopener">CRA My Account</a> or check your latest Notice of Assessment before contributing. Over-contributing to a TFSA or RRSP can trigger a 1%-per-month penalty tax on the excess amount. This tool does not know about non-residency years, forgotten contributions/withdrawals, or pension adjustments you haven't entered — it can only be as accurate as what you tell it. Not tax or financial advice.
+    </div>
+
+    <h2 class="section-title">TFSA Contribution Room</h2>
+    <p class="section-sub">Based on the CRA's published annual dollar limits since 2009.</p>
+
+    <div class="panel">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Year you turned (or will turn) 18</span>
+          <input type="number" id="tfsaAge18YearInput" value="2005" min="1991" max="2026" step="1" inputmode="numeric">
+        </label>
+        <label class="form-field">
+          <span>Total TFSA contributions made, ever</span>
+          <input type="number" id="tfsaContributionsInput" value="0" min="0" step="100" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Total TFSA withdrawals made before this year</span>
+          <input type="number" id="tfsaWithdrawalsInput" value="0" min="0" step="100" inputmode="decimal">
+        </label>
+      </div>
+      <div class="disclaimer-note">
+        A withdrawal only adds back to your room starting January 1 of the <em>following</em> year — don't include a withdrawal you made earlier this year, since it isn't available to recontribute until next year.
+      </div>
+    </div>
+
+    <div class="panel" id="tfsaSummaryPanel">
+      <div class="growth-headline" id="tfsaHeadline"></div>
+      <div class="growth-stats" id="tfsaStats"></div>
+    </div>
+
+    <h2 class="section-title">RRSP Contribution Room</h2>
+    <p class="section-sub">New room is 18% of last year's earned income, up to the year's dollar maximum, plus whatever you're carrying forward.</p>
+
+    <div class="panel">
+      <div class="form-grid">
+        <label class="form-field">
+          <span id="rrspIncomeLabel">Earned income, prior year</span>
+          <input type="number" id="rrspIncomeInput" value="60000" min="0" step="500" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Unused RRSP room (from your Notice of Assessment)</span>
+          <input type="number" id="rrspCarryforwardInput" value="0" min="0" step="100" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span id="rrspPensionLabel">Pension adjustment, prior year (if any)</span>
+          <input type="number" id="rrspPensionInput" value="0" min="0" step="100" inputmode="decimal">
+        </label>
+      </div>
+      <div class="disclaimer-note">
+        RRSP contributions can generally be made until December 31 of the year you turn 71. If you belong to an employer pension or deferred profit-sharing plan, your pension adjustment appears on your T4 slip — leave it at 0 if this doesn't apply to you.
+      </div>
+    </div>
+
+    <div class="panel" id="rrspSummaryPanel">
+      <div class="growth-headline" id="rrspHeadline"></div>
+      <div class="growth-stats" id="rrspStats"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <strong>Educational estimate only, not investment, tax, or legal advice.</strong> Figures are based on Canada Revenue Agency dollar limits published as of 2026 and the numbers you provide — they do not account for non-residency years, unreported past contributions or withdrawals, or errors in what you entered. Always verify your actual available room through CRA My Account or your Notice of Assessment, and consult a tax professional before contributing, especially if your situation is anything but straightforward.
+    </div>
+  </footer>
+
+  <script src="/js/theme-toggle.js"></script>
+  <script src="/js/contribution-calculator.js"></script>
+</body>
+</html>
