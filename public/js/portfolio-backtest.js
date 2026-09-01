@@ -123,13 +123,20 @@
     updateURL();
   }
 
+  // Rounds each share to 2 decimals, then gives the last entry whatever's
+  // left over -- so the displayed weights always add up to exactly 100.00,
+  // not just to 100.0 after the total label's own rounding.
   function splitEvenly() {
     if (state.entries.length === 0) return;
-    const even = 100 / state.entries.length;
+    const even = +(100 / state.entries.length).toFixed(2);
+    let used = 0;
     state.entries.forEach((e, i) => {
-      e.weight = i === state.entries.length - 1
-        ? +(100 - even * (state.entries.length - 1)).toFixed(2)
-        : +even.toFixed(2);
+      if (i === state.entries.length - 1) {
+        e.weight = +(100 - used).toFixed(2);
+      } else {
+        e.weight = even;
+        used += even;
+      }
     });
     renderWeightList();
     updateURL();

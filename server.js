@@ -530,9 +530,14 @@ app.get('/api/backtest', async (req, res) => {
     if (Math.abs(weightSum - 100) > 0.5) {
       return res.status(400).json({ error: `Weights must add up to 100% (currently ${weightSum.toFixed(1)}%).` });
     }
+    // Normalize by the actual sum (not a hardcoded /100) so weights that are
+    // off by a fraction of a percent -- still within the tolerance above --
+    // don't silently over- or under-invest relative to the reported
+    // contribution amounts, which would throw off the per-holding growth
+    // breakdown below.
     const weights = {};
     symbolsRaw.forEach((sym, i) => {
-      weights[sym] = weightsRaw[i] / 100;
+      weights[sym] = weightsRaw[i] / weightSum;
     });
 
     const histories = {};
