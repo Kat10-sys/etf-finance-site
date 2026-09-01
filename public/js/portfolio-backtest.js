@@ -34,7 +34,9 @@
   const copyLinkBtn = document.getElementById('copyLinkBtn');
   const backtestHeadline = document.getElementById('backtestHeadline');
   const backtestStats = document.getElementById('backtestStats');
+  const backtestTableHead = document.getElementById('backtestTableHead');
   const backtestTableBody = document.getElementById('backtestTableBody');
+  const holdingTableBody = document.getElementById('holdingTableBody');
 
   let chart = null;
 
@@ -247,7 +249,7 @@
   }
 
   window.addEventListener('themechange', () => {
-    if (state.lastResults) renderChart(state.lastResults.curve);
+    if (state.lastResults) renderChart(state.lastResults.curve, state.lastResults.symbols);
   });
 
   // ---------- shareable URL ----------
@@ -366,8 +368,9 @@
       rangeMeta.textContent = `${formatDate(data.startDate)} → ${formatDate(data.endDate)}`;
 
       renderSummary(data);
-      renderChart(data.curve);
-      renderTable(data.curve);
+      renderHoldingTable(data.bySymbolSummary);
+      renderChart(data.curve, data.symbols);
+      renderTable(data.curve, data.symbols);
     } catch (e) {
       showStatus(e.message, true);
     } finally {
@@ -398,11 +401,9 @@
     `;
   }
 
-  function renderChart(curve) {
+  function renderChart(curve, symbols) {
     const theme = chartTheme();
     const labels = curve.map((p) => formatDate(p.date));
-    const contributedData = curve.map((p) => p.contributed);
-    const growthData = curve.map((p) => p.value - p.contributed);
 
     const ctx = document.getElementById('backtestChart').getContext('2d');
     if (chart) chart.destroy();
@@ -410,17 +411,25 @@
       type: 'bar',
       data: {
         labels,
-        datasets: [
-          { label: 'Contributed', data: contributedData, backgroundColor: '#0d9488', stack: 's' },
-          { label: 'Growth', data: growthData, backgroundColor: '#2563eb', stack: 's' },
-        ],
+        datasets: symbols.map((sym) => ({
+          label: sym,
+          data: curve.map((p) => p.bySymbol[sym]),
+          backgroundColor: colorFor(sym),
+          stack: 's',
+        })),
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { position: 'bottom', labels: { color: theme.text } },
-          tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatMoney(item.parsed.y)}` } },
+          tooltip: {
+            callbacks: {
+              label: (item) => `${item.dataset.label}: ${formatMoney(item.parsed.y)}`,
+              footer: (items) => `Total: ${formatMoney(items.reduce((sum, i) => sum + i.parsed.y, 0))}`,
+            },
+          },
         },
         scales: {
           x: { stacked: true, ticks: { autoSkip: true, maxTicksLimit: 12, color: theme.muted }, grid: { display: false } },
@@ -430,18 +439,47 @@
     });
   }
 
-  function renderTable(curve) {
+  function renderTable(curve, symbols) {
+    backtestTableHead.innerHTML = `
+      <tr>
+        <th>Date</th>
+        ${symbols.map((sym) => `<th>${sym}</th>`).join('')}
+        <th>Total Contributed</th>
+        <th>Total Growth</th>
+        <th>Total Value</th>
+      </tr>
+    `;
     backtestTableBody.innerHTML = '';
     curve.forEach((p) => {
       const growth = p.value - p.contributed;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${formatDate(p.date)}</td>
+        ${symbols.map((sym) => `<td>${formatMoney(p.bySymbol[sym])}</td>`).join('')}
         <td>${formatMoney(p.contributed)}</td>
         <td>${formatMoney(growth)}</td>
         <td>${formatMoney(p.value)}</td>
       `;
       backtestTableBody.appendChild(tr);
+    });
+  }
+
+  function renderHoldingTable(bySymbolSummary) {
+    holdingTableBody.innerHTML = '';
+    bySymbolSummary.forEach((h) => {
+      const growthPct = h.contributed > 0 ? (h.growth / h.contributed) * 100 : null;
+      const growthClass = h.growth >= 0 ? 'pos' : 'neg';
+      const sign = h.growth >= 0 ? '+' : '';
+      const growthPctText = growthPct != null ? ` (${sign}${growthPct.toFixed(1)}%)` : '';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(h.symbol)};display:inline-block"></span>${h.symbol}</span></td>
+        <td>${(h.weight * 100).toFixed(1)}%</td>
+        <td>${formatMoney(h.contributed)}</td>
+        <td>${formatMoney(h.endingValue)}</td>
+        <td><span class="${growthClass}">${sign}${formatMoney(h.growth)}${growthPctText}</span></td>
+      `;
+      holdingTableBody.appendChild(tr);
     });
   }
 

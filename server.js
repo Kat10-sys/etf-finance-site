@@ -671,10 +671,28 @@ app.get('/api/backtest', async (req, res) => {
       return v;
     }
 
+    function valuesBySymbolAt(ts) {
+      const out = {};
+      for (const sym of validSymbols) {
+        const price = priceOnOrBefore(sym, ts);
+        out[sym] = price ? units[sym] * price : 0;
+      }
+      return out;
+    }
+
     const units = {};
     const startPrices = {};
     for (const sym of validSymbols) startPrices[sym] = priceOnOrBefore(sym, timeline[0]);
     for (const sym of validSymbols) units[sym] = (initial * weights[sym]) / startPrices[sym];
+
+    // Tracks money actually put toward each ticker (initial + its share of
+    // each contribution), independent of unit count. Rebalancing moves
+    // units between tickers but is not new money, so it never touches this
+    // -- that's what lets each ticker's "value - contributedBySymbol" (the
+    // per-holding growth reported below) sum exactly to the portfolio's
+    // total growth even when rebalancing is on.
+    const contributedBySymbol = {};
+    for (const sym of validSymbols) contributedBySymbol[sym] = initial * weights[sym];
 
     let totalContributed = initial;
     let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
@@ -703,7 +721,10 @@ app.get('/api/backtest', async (req, res) => {
         cashflows.push({ date: nextContribDate, amount: -contribution });
         for (const sym of validSymbols) {
           const price = priceOnOrBefore(sym, nextContribDate);
-          if (price) units[sym] += (contribution * weights[sym]) / price;
+          if (price) {
+            units[sym] += (contribution * weights[sym]) / price;
+            contributedBySymbol[sym] += contribution * weights[sym];
+          }
         }
         nextContribDate = addPeriod(nextContribDate, frequency);
       }
@@ -717,12 +738,13 @@ app.get('/api/backtest', async (req, res) => {
         nextRebalanceDate = addPeriod(nextRebalanceDate, 'annually');
       }
 
-      const value = portfolioValueAt(day);
+      const bySymbol = valuesBySymbolAt(day);
+      const value = validSymbols.reduce((sum, sym) => sum + bySymbol[sym], 0);
       if (value > peakValue) peakValue = value;
       const drawdown = peakValue > 0 ? (peakValue - value) / peakValue : 0;
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
 
-      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed });
+      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed, bySymbol });
     }
 
     const finalEntry = dailyCurve[dailyCurve.length - 1];
@@ -746,6 +768,12 @@ app.get('/api/backtest', async (req, res) => {
     }
     if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
 
+    const bySymbolSummary = validSymbols.map((sym) => {
+      const endingValue = finalEntry.bySymbol[sym];
+      const contributed = contributedBySymbol[sym];
+      return { symbol: sym, weight: weights[sym], contributed, endingValue, growth: endingValue - contributed };
+    });
+
     res.json({
       symbols: validSymbols,
       weights: validSymbols.map((s) => weights[s]),
@@ -763,6 +791,7 @@ app.get('/api/backtest', async (req, res) => {
       annualizedReturn,
       maxDrawdown,
       curve: monthlyCurve,
+      bySymbolSummary,
       fetchErrors,
       fxErrors,
     });

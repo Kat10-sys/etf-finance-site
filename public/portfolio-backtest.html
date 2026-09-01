@@ -111,6 +111,24 @@
         <div class="growth-stats" id="backtestStats"></div>
       </div>
 
+      <div class="panel">
+        <h3 class="holding-title">Growth by holding</h3>
+        <div class="table-scroll">
+          <table class="results-table" id="holdingTable">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Weight</th>
+                <th>Contributed</th>
+                <th>Ending Value</th>
+                <th>Growth</th>
+              </tr>
+            </thead>
+            <tbody id="holdingTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="panel chart-card">
         <div class="chart-wrap"><canvas id="backtestChart"></canvas></div>
       </div>
@@ -118,7 +136,7 @@
       <div class="panel">
         <div class="table-scroll">
           <table class="results-table" id="backtestTable">
-            <thead>
+            <thead id="backtestTableHead">
               <tr>
                 <th>Date</th>
                 <th>Contributed</th>
