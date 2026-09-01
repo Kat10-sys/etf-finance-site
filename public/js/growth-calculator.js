@@ -72,10 +72,13 @@
   function render() {
     const initial = Math.max(0, Number(initialInput.value) || 0);
     const years = Math.min(60, Math.max(1, Math.round(Number(yearsInput.value) || 0)));
-    const annualRate = (Number(returnInput.value) || 0) / 100;
+    // Clamped to the field's own min/max -- those HTML attributes only
+    // affect the spinner arrows, not typed input, so without this a stray
+    // extra digit (500 instead of 50) compounds into a meaningless number.
+    const annualRate = Math.max(-20, Math.min(30, Number(returnInput.value) || 0)) / 100;
     const contribution = Math.max(0, Number(contributionInput.value) || 0);
     const contributionsPerYear = Number(frequencyInput.value) === 1 ? 1 : 12;
-    const annualInflation = Math.max(0, Number(inflationInput.value) || 0) / 100;
+    const annualInflation = Math.max(0, Math.min(15, Number(inflationInput.value) || 0)) / 100;
     const growContribution = increaseWithInflation.checked;
     const shared = { initial, years, annualRate, contribution, contributionsPerYear, annualInflation, growContribution };
 
@@ -112,8 +115,8 @@
   // mathematical comparison of two fee levels applied to the same
   // hypothetical inputs above, not a projection of any specific fund.
   function renderFeeImpact(shared) {
-    const feeA = Math.max(0, Number(feeAInput.value) || 0) / 100;
-    const feeB = Math.max(0, Number(feeBInput.value) || 0) / 100;
+    const feeA = Math.max(0, Math.min(10, Number(feeAInput.value) || 0)) / 100;
+    const feeB = Math.max(0, Math.min(10, Number(feeBInput.value) || 0)) / 100;
     const { years, annualInflation } = shared;
 
     const yearlyA = simulate({ ...shared, annualRate: shared.annualRate - feeA });
