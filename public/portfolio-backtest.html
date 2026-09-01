@@ -112,11 +112,26 @@
 
       <div class="currency-row">
         <span class="currency-label">Rebalancing:</span>
-        <div class="currency-buttons">
-          <button class="currency-btn active" data-rebalance="annual">Annual rebalancing</button>
-          <button class="currency-btn" data-rebalance="none">No rebalancing (buy &amp; hold)</button>
-        </div>
+        <select id="rebalanceInput">
+          <option value="none">No rebalancing (buy &amp; hold)</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="semiannual">Semi-annually</option>
+          <option value="annually" selected>Annually</option>
+        </select>
       </div>
+
+      <div class="currency-row">
+        <span class="currency-label">Risk-free rate (for Sharpe/Sortino):</span>
+        <input type="number" id="riskFreeRateInput" value="0" min="0" max="20" step="0.1" inputmode="decimal" style="width:80px">
+        <span class="currency-label">%</span>
+      </div>
+
+      <div class="currency-row">
+        <span class="currency-label">Benchmark (optional):</span>
+        <input type="text" id="benchmarkInput" placeholder="e.g. SPY, VFV.TO" autocomplete="off" style="width:140px">
+      </div>
+      <div class="hint">Simulated with the same initial investment, contributions, and retirement withdrawals as your portfolio above, for a like-for-like comparison.</div>
 
       <div class="currency-row">
         <span class="currency-label">Show in:</span>
@@ -146,6 +161,28 @@
       <div class="panel" id="summaryPanel">
         <div class="growth-headline" id="backtestHeadline"></div>
         <div class="growth-stats" id="backtestStats"></div>
+      </div>
+
+      <div class="panel">
+        <h3 class="holding-title">Risk-Adjusted Metrics</h3>
+        <div class="growth-stats" id="riskStats"></div>
+        <div class="hint" id="riskStatsHint" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel" id="benchmarkPanel" style="display:none">
+        <h3 class="holding-title">Benchmark Comparison</h3>
+        <div class="table-scroll">
+          <table class="results-table" id="benchmarkTable">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Portfolio</th>
+                <th>Benchmark</th>
+              </tr>
+            </thead>
+            <tbody id="benchmarkTableBody"></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="panel">

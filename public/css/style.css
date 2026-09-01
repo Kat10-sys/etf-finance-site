@@ -399,6 +399,15 @@ footer {
 }
 .currency-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
 .currency-buttons { display: flex; gap: 6px; }
+.currency-row select, .currency-row input[type="number"], .currency-row input[type="text"] {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-family: inherit;
+}
 .currency-btn {
   padding: 6px 14px;
   border-radius: 999px;

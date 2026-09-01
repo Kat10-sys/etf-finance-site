@@ -5,7 +5,7 @@
     entries: [], // { symbol, weight }
     range: 'max-common',
     currency: 'CAD',
-    rebalance: 'annual',
+    rebalance: 'annually',
     dollarMode: 'nominal', // 'nominal' | 'real' -- display-only, no refetch needed
     customStart: '',
     customEnd: '',
@@ -37,12 +37,18 @@
   const withdrawalRateInput = document.getElementById('withdrawalRateInput');
   const withdrawalInflationInput = document.getElementById('withdrawalInflationInput');
   const withdrawalFrequencyInput = document.getElementById('withdrawalFrequencyInput');
-  const rebalanceButtons = document.querySelectorAll('[data-rebalance]');
+  const rebalanceInput = document.getElementById('rebalanceInput');
+  const riskFreeRateInput = document.getElementById('riskFreeRateInput');
+  const benchmarkInput = document.getElementById('benchmarkInput');
+  const benchmarkPanel = document.getElementById('benchmarkPanel');
+  const benchmarkTableBody = document.getElementById('benchmarkTableBody');
   const currencyButtons = document.querySelectorAll('[data-currency]');
   const dollarModeButtons = document.querySelectorAll('[data-dollar-mode]');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
   const backtestHeadline = document.getElementById('backtestHeadline');
   const backtestStats = document.getElementById('backtestStats');
+  const riskStats = document.getElementById('riskStats');
+  const riskStatsHint = document.getElementById('riskStatsHint');
   const backtestTableHead = document.getElementById('backtestTableHead');
   const backtestTableBody = document.getElementById('backtestTableBody');
   const holdingTableBody = document.getElementById('holdingTableBody');
@@ -224,14 +230,21 @@
     if (state.lastResults && state.customStart) runBacktest();
   });
 
-  rebalanceButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      rebalanceButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.rebalance = btn.dataset.rebalance;
-      updateURL();
-      if (state.lastResults) runBacktest();
-    });
+  rebalanceInput.addEventListener('change', () => {
+    state.rebalance = rebalanceInput.value;
+    updateURL();
+    if (state.lastResults) runBacktest();
+  });
+
+  riskFreeRateInput.addEventListener('change', () => {
+    updateURL();
+    if (state.lastResults) runBacktest();
+  });
+
+  benchmarkInput.addEventListener('change', () => {
+    benchmarkInput.value = normalizeTicker(benchmarkInput.value);
+    updateURL();
+    if (state.lastResults) runBacktest();
   });
 
   currencyButtons.forEach((btn) => {
@@ -321,6 +334,8 @@
     }
     params.set('currency', state.currency);
     params.set('rebalance', state.rebalance);
+    if (Number(riskFreeRateInput.value) > 0) params.set('riskFreeRate', riskFreeRateInput.value);
+    if (benchmarkInput.value) params.set('benchmark', benchmarkInput.value);
     if (state.dollarMode === 'real') params.set('dollarMode', 'real');
     params.set('initial', initialInput.value || '0');
     params.set('contribution', contributionInput.value || '0');
@@ -367,11 +382,14 @@
       dollarModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.dollarMode === 'real'));
     }
 
+    const REBALANCE_VALUES = new Set(['none', 'monthly', 'quarterly', 'semiannual', 'annually']);
     const rebalance = params.get('rebalance');
-    if (rebalance === 'annual' || rebalance === 'none') {
+    if (REBALANCE_VALUES.has(rebalance)) {
       state.rebalance = rebalance;
-      rebalanceButtons.forEach((b) => b.classList.toggle('active', b.dataset.rebalance === rebalance));
+      rebalanceInput.value = rebalance;
     }
+    if (params.get('riskFreeRate') != null) riskFreeRateInput.value = params.get('riskFreeRate');
+    if (params.get('benchmark') != null) benchmarkInput.value = normalizeTicker(params.get('benchmark'));
 
     if (params.get('initial') != null) initialInput.value = params.get('initial');
     if (params.get('contribution') != null) contributionInput.value = params.get('contribution');
@@ -423,10 +441,12 @@
         range: state.range,
         currency: state.currency,
         rebalance: state.rebalance,
+        riskFreeRate: String(Math.max(0, Number(riskFreeRateInput.value) || 0)),
         initial: String(initial),
         contribution: String(contribution),
         frequency: frequencyInput.value,
       });
+      if (benchmarkInput.value) params.set('benchmark', benchmarkInput.value);
       if (state.range === 'custom') {
         params.set('start', state.customStart);
         if (state.customEnd) params.set('end', state.customEnd);
@@ -465,9 +485,71 @@
 
   function renderResults(data) {
     renderSummary(data);
+    renderRiskStats(data);
+    renderBenchmark(data);
     renderHoldingTable(data);
     renderChart(data);
     renderTable(data);
+  }
+
+  function renderBenchmark(data) {
+    const b = data.benchmark;
+    if (!b) {
+      benchmarkPanel.style.display = 'none';
+      return;
+    }
+    benchmarkPanel.style.display = 'block';
+    if (b.error) {
+      benchmarkTableBody.innerHTML = `<tr><td colspan="3" style="text-align:left;color:var(--text-muted)">${b.symbol}: ${b.error}</td></tr>`;
+      return;
+    }
+    const real = state.dollarMode === 'real';
+    const rows = [
+      ['Ending value', formatMoney(real ? data.endingValueReal : data.endingValue), formatMoney(real ? b.endingValueReal : b.endingValue)],
+      ['Investment growth', formatMoney(real ? data.totalGrowthReal : data.totalGrowth), formatMoney(real ? b.totalGrowthReal : b.totalGrowth)],
+      ['Annualized return (XIRR)', pctOrNA(real ? data.annualizedReturnReal : data.annualizedReturn), pctOrNA(real ? b.annualizedReturnReal : b.annualizedReturn)],
+      ['Standard deviation', pctOrNA(data.standardDeviation), pctOrNA(b.standardDeviation)],
+      ['Sharpe ratio', ratioOrNA(data.sharpeRatio), ratioOrNA(b.sharpeRatio)],
+      ['Max drawdown', pctOrNA(real ? data.maxDrawdownReal : data.maxDrawdown), pctOrNA(real ? b.maxDrawdownReal : b.maxDrawdown)],
+    ];
+    benchmarkTableBody.innerHTML = rows.map(([label, port, bench]) => `
+      <tr><td>${label}</td><td>${port}</td><td>${bench}</td></tr>
+    `).join('');
+  }
+
+  function pctOrNA(v) {
+    return v != null ? `${(v * 100).toFixed(2)}%` : 'n/a';
+  }
+  function ratioOrNA(v) {
+    return v != null ? v.toFixed(2) : 'n/a';
+  }
+
+  // These are always computed on nominal (not inflation-adjusted) monthly
+  // returns -- the standard convention, and what the reference tool this
+  // was modeled on shows too -- so they don't change with the dollar-mode
+  // toggle the way the dollar-figure stats do.
+  function renderRiskStats(data) {
+    if (data.standardDeviation == null) {
+      riskStats.innerHTML = '<div class="stat-label">Not enough monthly data points in this range to compute risk metrics.</div>';
+      riskStatsHint.textContent = '';
+      return;
+    }
+    const pct = (v) => (v != null ? `${(v * 100).toFixed(2)}%` : 'n/a');
+    const ratio = (v) => (v != null ? v.toFixed(2) : 'n/a');
+    const stats = [
+      { color: '#dc2626', label: 'Standard deviation (annualized)', value: pct(data.standardDeviation) },
+      { color: '#7c3aed', label: 'Sharpe ratio', value: ratio(data.sharpeRatio) },
+      { color: '#2563eb', label: 'Sortino ratio', value: ratio(data.sortinoRatio) },
+      { color: '#059669', label: 'Best year', value: pct(data.bestYear) },
+      { color: '#d97706', label: 'Worst year', value: pct(data.worstYear) },
+    ];
+    riskStats.innerHTML = stats.map((s) => `
+      <div class="stat-block">
+        <span class="swatch" style="background:${s.color}"></span>
+        <div><div class="stat-label">${s.label}</div><div class="stat-value">${s.value}</div></div>
+      </div>
+    `).join('');
+    riskStatsHint.textContent = `Based on monthly returns net of contributions/withdrawals, using a ${(data.riskFreeRate * 100).toFixed(1)}% assumed risk-free rate. Best/worst year figures may reflect a partial calendar year at either end of the range.`;
   }
 
   function renderSummary(data) {
@@ -480,7 +562,8 @@
     const xirrText = annualizedReturn != null ? `${(annualizedReturn * 100).toFixed(2)}%` : 'n/a';
     const maxDrawdown = real ? data.maxDrawdownReal : data.maxDrawdown;
     const ddText = `${(maxDrawdown * 100).toFixed(1)}%`;
-    const rebalanceText = data.rebalance === 'annual' ? 'annual rebalancing' : 'no rebalancing';
+    const REBALANCE_LABELS = { monthly: 'monthly', quarterly: 'quarterly', semiannual: 'semi-annual', annually: 'annual' };
+    const rebalanceText = data.rebalance === 'none' ? 'no rebalancing' : `${REBALANCE_LABELS[data.rebalance] || data.rebalance} rebalancing`;
     const retirement = data.retirement;
     const retirementValue = retirement ? (real ? retirement.retirementValueReal : retirement.retirementValue) : null;
 
@@ -536,6 +619,23 @@
     const labels = curve.map((p) => formatDate(p.date));
     const netInvestedLabel = retirement ? 'Net Invested (Contributed − Withdrawn)' : 'Total Contributed';
 
+    const benchmarkDatasets = [];
+    if (data.benchmark && !data.benchmark.error) {
+      const byDate = new Map(data.benchmark.curve.map((p) => [p.date, real ? p.valueReal : p.value]));
+      benchmarkDatasets.push({
+        type: 'line',
+        label: `Benchmark: ${data.benchmark.symbol}`,
+        data: curve.map((p) => byDate.get(p.date) ?? null),
+        spanGaps: true,
+        borderColor: '#db2777',
+        backgroundColor: '#db2777',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        order: 0,
+      });
+    }
+
     const ctx = document.getElementById('backtestChart').getContext('2d');
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
@@ -566,6 +666,7 @@
             fill: false,
             order: 0,
           },
+          ...benchmarkDatasets,
         ],
       },
       options: {

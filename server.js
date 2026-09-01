@@ -507,6 +507,8 @@ app.get('/api/compare', async (req, res) => {
 function addPeriod(ts, freq) {
   const d = new Date(ts);
   if (freq === 'annually') d.setUTCFullYear(d.getUTCFullYear() + 1);
+  else if (freq === 'semiannual') d.setUTCMonth(d.getUTCMonth() + 6);
+  else if (freq === 'quarterly') d.setUTCMonth(d.getUTCMonth() + 3);
   else d.setUTCMonth(d.getUTCMonth() + 1);
   return d.getTime();
 }
@@ -546,6 +548,230 @@ function computeXIRR(cashflows) {
     }
   }
   return (lo + hi) / 2;
+}
+
+// Simulates a single 100%-weighted asset over a fixed timeline with the same
+// initial/contribution/retirement schedule as a multi-asset portfolio, so a
+// benchmark ticker can be compared on equal footing ("what if this same
+// money had gone into SPY instead"). Deliberately a separate, simpler
+// implementation rather than a generalized N=1 case of the main route's
+// loop -- a single asset never needs cross-symbol weight splitting or
+// rebalancing, and duplicating the (already thoroughly tested) simpler path
+// here is safer than threading a benchmark case through the more complex
+// multi-asset loop.
+function simulateSingleAsset({
+  history,
+  timeline,
+  initial,
+  contribution,
+  frequency,
+  hasRetirement,
+  retirementDate,
+  withdrawalRate,
+  withdrawalInflation,
+  withdrawalFrequency,
+  cpiRatioToToday,
+  riskFreeRate,
+}) {
+  function priceOnOrBefore(ts) {
+    const p = findOnOrBefore(history.series, ts);
+    return p ? p.close : null;
+  }
+  const startPrice = priceOnOrBefore(timeline[0]);
+  if (!startPrice) return null;
+
+  const dividendsByDay = new Map();
+  for (const d of history.dividends) {
+    const day = Math.floor(d.date / DAY_MS) * DAY_MS;
+    dividendsByDay.set(day, (dividendsByDay.get(day) || 0) + d.amount);
+  }
+
+  let units = initial / startPrice;
+  let totalContributed = initial;
+  let totalWithdrawn = 0;
+  const startRatio = cpiRatioToToday(timeline[0]);
+  let totalContributedReal = initial * startRatio;
+  let totalWithdrawnReal = 0;
+
+  let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
+  let peakValue = initial;
+  let maxDrawdown = 0;
+  let peakValueReal = initial * startRatio;
+  let maxDrawdownReal = 0;
+  const cashflows = [{ date: timeline[0], amount: -initial }];
+  const dailyCurve = [];
+
+  let retirementValue = null;
+  let annualWithdrawalInitial = null;
+  let currentAnnualWithdrawal = 0;
+  let nextWithdrawalDate = hasRetirement ? retirementDate : Infinity;
+  let nextInflationBumpDate = hasRetirement ? addPeriod(retirementDate, 'annually') : Infinity;
+  let depletedDate = null;
+
+  for (const day of timeline) {
+    const dayFloor = Math.floor(day / DAY_MS) * DAY_MS;
+    const divPerUnit = dividendsByDay.get(dayFloor);
+    if (divPerUnit) {
+      const price = priceOnOrBefore(day);
+      if (price) units += (units * divPerUnit) / price;
+    }
+
+    while (day >= nextContribDate) {
+      if (hasRetirement && nextContribDate >= retirementDate) {
+        nextContribDate = Infinity;
+        break;
+      }
+      const price = priceOnOrBefore(nextContribDate);
+      if (price) {
+        units += contribution / price;
+        totalContributed += contribution;
+        totalContributedReal += contribution * cpiRatioToToday(nextContribDate);
+        cashflows.push({ date: nextContribDate, amount: -contribution });
+      }
+      nextContribDate = addPeriod(nextContribDate, frequency);
+    }
+
+    while (day >= nextWithdrawalDate) {
+      if (retirementValue == null) {
+        const retPrice = priceOnOrBefore(retirementDate);
+        retirementValue = retPrice ? units * retPrice : 0;
+        annualWithdrawalInitial = retirementValue * withdrawalRate;
+        currentAnnualWithdrawal = annualWithdrawalInitial;
+      }
+      while (nextInflationBumpDate <= nextWithdrawalDate) {
+        currentAnnualWithdrawal *= 1 + withdrawalInflation;
+        nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
+      }
+      const periodsPerYear = withdrawalFrequency === 'annually' ? 1 : 12;
+      const installment = currentAnnualWithdrawal / periodsPerYear;
+      const price = priceOnOrBefore(nextWithdrawalDate);
+      const valueNow = price ? units * price : 0;
+      const actualWithdrawal = Math.min(installment, valueNow);
+      if (price && actualWithdrawal > 0) units -= actualWithdrawal / price;
+
+      totalWithdrawn += actualWithdrawal;
+      totalWithdrawnReal += actualWithdrawal * cpiRatioToToday(nextWithdrawalDate);
+      cashflows.push({ date: nextWithdrawalDate, amount: actualWithdrawal });
+
+      if (actualWithdrawal < installment - 1e-6) {
+        depletedDate = nextWithdrawalDate;
+        units = 0;
+        nextWithdrawalDate = Infinity;
+      } else {
+        nextWithdrawalDate = addPeriod(nextWithdrawalDate, withdrawalFrequency);
+      }
+    }
+
+    const price = priceOnOrBefore(day);
+    const value = price ? units * price : 0;
+    if (value > peakValue) peakValue = value;
+    const drawdown = peakValue > 0 ? (peakValue - value) / peakValue : 0;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+
+    const valueReal = value * cpiRatioToToday(day);
+    if (valueReal > peakValueReal) peakValueReal = valueReal;
+    const drawdownReal = peakValueReal > 0 ? (peakValueReal - valueReal) / peakValueReal : 0;
+    if (drawdownReal > maxDrawdownReal) maxDrawdownReal = drawdownReal;
+
+    dailyCurve.push({
+      date: dayFloor,
+      value,
+      contributed: totalContributed,
+      contributedReal: totalContributedReal,
+      withdrawn: totalWithdrawn,
+      withdrawnReal: totalWithdrawnReal,
+    });
+  }
+
+  const finalEntry = dailyCurve[dailyCurve.length - 1];
+  cashflows.push({ date: finalEntry.date, amount: finalEntry.value });
+  const annualizedReturn = computeXIRR(cashflows);
+  const realCashflows = cashflows.map((cf) => ({ date: cf.date, amount: cf.amount * cpiRatioToToday(cf.date) }));
+  const annualizedReturnReal = computeXIRR(realCashflows);
+
+  const monthlyCurve = [];
+  let lastKey = null;
+  for (const point of dailyCurve) {
+    const d = new Date(point.date);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    if (key !== lastKey) {
+      monthlyCurve.push(point);
+      lastKey = key;
+    } else {
+      monthlyCurve[monthlyCurve.length - 1] = point;
+    }
+  }
+  if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
+
+  const monthlyReturns = [];
+  for (let i = 1; i < monthlyCurve.length; i++) {
+    const prev = monthlyCurve[i - 1];
+    const cur = monthlyCurve[i];
+    if (prev.value <= 0) continue;
+    const netFlow = (cur.contributed - prev.contributed) - (cur.withdrawn - prev.withdrawn);
+    monthlyReturns.push((cur.value - netFlow) / prev.value - 1);
+  }
+
+  let standardDeviation = null;
+  let sharpeRatio = null;
+  let sortinoRatio = null;
+  let bestYear = null;
+  let worstYear = null;
+  if (monthlyReturns.length >= 2) {
+    const n = monthlyReturns.length;
+    const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
+    const variance = monthlyReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
+    standardDeviation = Math.sqrt(variance) * Math.sqrt(12);
+
+    const monthlyRiskFree = Math.pow(1 + riskFreeRate, 1 / 12) - 1;
+    const downsideSqSum = monthlyReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
+    const downsideDeviation = Math.sqrt(downsideSqSum / n) * Math.sqrt(12);
+
+    const annualizedMean = mean * 12;
+    sharpeRatio = standardDeviation > 0 ? (annualizedMean - riskFreeRate) / standardDeviation : null;
+    sortinoRatio = downsideDeviation > 0 ? (annualizedMean - riskFreeRate) / downsideDeviation : null;
+
+    const yearlyFactors = {};
+    for (let i = 1; i < monthlyCurve.length; i++) {
+      const year = new Date(monthlyCurve[i].date).getUTCFullYear();
+      yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
+    }
+    const yearlyReturns = Object.values(yearlyFactors).map((f) => f - 1);
+    if (yearlyReturns.length) {
+      bestYear = Math.max(...yearlyReturns);
+      worstYear = Math.min(...yearlyReturns);
+    }
+  }
+
+  const endingValueRatio = cpiRatioToToday(finalEntry.date);
+  return {
+    curve: monthlyCurve.map((p) => ({ date: p.date, value: p.value, valueReal: p.value * cpiRatioToToday(p.date) })),
+    totalContributed,
+    totalContributedReal,
+    totalWithdrawn,
+    totalWithdrawnReal,
+    endingValue: finalEntry.value,
+    endingValueReal: finalEntry.value * endingValueRatio,
+    totalGrowth: finalEntry.value - totalContributed + totalWithdrawn,
+    totalGrowthReal: finalEntry.value * endingValueRatio - totalContributedReal + totalWithdrawnReal,
+    annualizedReturn,
+    annualizedReturnReal,
+    maxDrawdown,
+    maxDrawdownReal,
+    standardDeviation,
+    sharpeRatio,
+    sortinoRatio,
+    bestYear,
+    worstYear,
+    retirement: hasRetirement
+      ? {
+          retirementValue,
+          retirementValueReal: retirementValue != null ? retirementValue * cpiRatioToToday(retirementDate) : null,
+          annualWithdrawalInitial,
+          depletedDate,
+        }
+      : null,
+  };
 }
 
 app.get('/api/backtest', async (req, res) => {
@@ -590,6 +816,20 @@ app.get('/api/backtest', async (req, res) => {
       return res.status(404).json({ error: 'One or more tickers could not be loaded.', fetchErrors });
     }
 
+    // Optional benchmark ticker, simulated the same way as the portfolio
+    // (same cash flows) for an apples-to-apples comparison. Kept best-effort:
+    // a benchmark that fails to load never blocks the main portfolio result.
+    const benchmarkSymbol = req.query.benchmark ? normalizeSymbol(req.query.benchmark) : null;
+    let benchmarkHistory = null;
+    let benchmarkError = null;
+    if (benchmarkSymbol) {
+      try {
+        benchmarkHistory = await fetchHistory(benchmarkSymbol);
+      } catch (e) {
+        benchmarkError = e.message;
+      }
+    }
+
     // Blending multiple tickers into one portfolio value requires a single
     // common currency, unlike /api/compare where each ticker can stay in
     // its own native currency side by side.
@@ -599,6 +839,9 @@ app.get('/api/backtest', async (req, res) => {
     for (const sym of validSymbols) {
       const native = histories[sym].currency;
       if (native && native !== targetCurrency) neededPairs.add(`${native}${targetCurrency}`);
+    }
+    if (benchmarkHistory && benchmarkHistory.currency && benchmarkHistory.currency !== targetCurrency) {
+      neededPairs.add(`${benchmarkHistory.currency}${targetCurrency}`);
     }
     const fxSeriesByPair = {};
     await Promise.all(
@@ -618,6 +861,15 @@ app.get('/api/backtest', async (req, res) => {
           return res.status(502).json({ error: `Could not fetch exchange rate to convert ${sym} to ${targetCurrency}.`, fxErrors });
         }
         histories[sym] = convertHistoryCurrency(histories[sym], fx);
+      }
+    }
+    if (benchmarkHistory && benchmarkHistory.currency && benchmarkHistory.currency !== targetCurrency) {
+      const fx = fxSeriesByPair[`${benchmarkHistory.currency}${targetCurrency}`];
+      if (fx) {
+        benchmarkHistory = convertHistoryCurrency(benchmarkHistory, fx);
+      } else {
+        benchmarkError = `Could not fetch exchange rate to convert ${benchmarkSymbol} to ${targetCurrency}.`;
+        benchmarkHistory = null;
       }
     }
 
@@ -664,7 +916,16 @@ app.get('/api/backtest', async (req, res) => {
     const initial = Math.max(0, parseFloat(req.query.initial) || 0);
     const contribution = Math.max(0, parseFloat(req.query.contribution) || 0);
     const frequency = req.query.frequency === 'annually' ? 'annually' : 'monthly';
-    const rebalance = req.query.rebalance === 'none' ? 'none' : 'annual';
+    const REBALANCE_FREQUENCIES = new Set(['monthly', 'quarterly', 'semiannual', 'annually']);
+    const rebalance = req.query.rebalance === 'none'
+      ? 'none'
+      : REBALANCE_FREQUENCIES.has(req.query.rebalance)
+        ? req.query.rebalance
+        : 'annually';
+    // Used only for Sharpe/Sortino below -- left as a plain user assumption
+    // (default 0%) rather than sourced historical T-bill data, so it's never
+    // presented with more authority than it has.
+    const riskFreeRate = Math.max(0, Math.min(20, parseFloat(req.query.riskFreeRate) || 0)) / 100;
 
     if (initial <= 0 && contribution <= 0) {
       return res.status(400).json({ error: 'Enter an initial investment or a contribution amount.' });
@@ -787,7 +1048,7 @@ app.get('/api/backtest', async (req, res) => {
     let totalWithdrawn = 0;
     let totalWithdrawnReal = 0;
     let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
-    let nextRebalanceDate = rebalance === 'annual' ? addPeriod(timeline[0], 'annually') : Infinity;
+    let nextRebalanceDate = rebalance !== 'none' ? addPeriod(timeline[0], rebalance) : Infinity;
     let peakValue = initial;
     let maxDrawdown = 0;
     let peakValueReal = initial * startRatio;
@@ -847,7 +1108,7 @@ app.get('/api/backtest', async (req, res) => {
           const price = priceOnOrBefore(sym, nextRebalanceDate);
           if (price) units[sym] = (totalValue * weights[sym]) / price;
         }
-        nextRebalanceDate = addPeriod(nextRebalanceDate, 'annually');
+        nextRebalanceDate = addPeriod(nextRebalanceDate, rebalance);
       }
 
       // Withdrawals sell proportionally across whatever is currently held
@@ -944,6 +1205,52 @@ app.get('/api/backtest', async (req, res) => {
     }
     if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
 
+    // Time-weighted monthly returns, net of contribution/withdrawal cash
+    // flows (a Modified Dietz approximation: subtract the period's net flow
+    // from the ending value before comparing to the starting value), used
+    // for the risk metrics below. This is deliberately not the raw
+    // value[i]/value[i-1] ratio, which would count a contribution as if it
+    // were investment growth.
+    const monthlyReturns = [];
+    for (let i = 1; i < monthlyCurve.length; i++) {
+      const prev = monthlyCurve[i - 1];
+      const cur = monthlyCurve[i];
+      if (prev.value <= 0) continue;
+      const netFlow = (cur.contributed - prev.contributed) - (cur.withdrawn - prev.withdrawn);
+      monthlyReturns.push((cur.value - netFlow) / prev.value - 1);
+    }
+
+    let standardDeviation = null;
+    let sharpeRatio = null;
+    let sortinoRatio = null;
+    let bestYear = null;
+    let worstYear = null;
+    if (monthlyReturns.length >= 2) {
+      const n = monthlyReturns.length;
+      const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
+      const variance = monthlyReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
+      standardDeviation = Math.sqrt(variance) * Math.sqrt(12);
+
+      const monthlyRiskFree = Math.pow(1 + riskFreeRate, 1 / 12) - 1;
+      const downsideSqSum = monthlyReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
+      const downsideDeviation = Math.sqrt(downsideSqSum / n) * Math.sqrt(12);
+
+      const annualizedMean = mean * 12;
+      sharpeRatio = standardDeviation > 0 ? (annualizedMean - riskFreeRate) / standardDeviation : null;
+      sortinoRatio = downsideDeviation > 0 ? (annualizedMean - riskFreeRate) / downsideDeviation : null;
+
+      const yearlyFactors = {};
+      for (let i = 1; i < monthlyCurve.length; i++) {
+        const year = new Date(monthlyCurve[i].date).getUTCFullYear();
+        yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
+      }
+      const yearlyReturns = Object.values(yearlyFactors).map((f) => f - 1);
+      if (yearlyReturns.length) {
+        bestYear = Math.max(...yearlyReturns);
+        worstYear = Math.min(...yearlyReturns);
+      }
+    }
+
     // Attach a CPI index to each point so the frontend can convert nominal
     // dollars to today's purchasing power without a second round trip.
     for (const point of monthlyCurve) {
@@ -958,6 +1265,28 @@ app.get('/api/backtest', async (req, res) => {
     if (latestCpi != null) {
       const realCashflows = cashflows.map((cf) => ({ date: cf.date, amount: cf.amount * cpiRatioToToday(cf.date) }));
       annualizedReturnReal = computeXIRR(realCashflows);
+    }
+
+    let benchmarkResult = null;
+    if (benchmarkSymbol && benchmarkHistory) {
+      if (!findOnOrBefore(benchmarkHistory.series, timeline[0])) {
+        benchmarkError = `${benchmarkSymbol} has no price data at the start of this backtest (${new Date(timeline[0]).toISOString().slice(0, 10)}).`;
+      } else {
+        benchmarkResult = simulateSingleAsset({
+          history: benchmarkHistory,
+          timeline,
+          initial,
+          contribution,
+          frequency,
+          hasRetirement,
+          retirementDate,
+          withdrawalRate,
+          withdrawalInflation,
+          withdrawalFrequency,
+          cpiRatioToToday,
+          riskFreeRate,
+        });
+      }
     }
 
     const endingValueRatio = cpiRatioToToday(finalEntry.date);
@@ -1001,6 +1330,12 @@ app.get('/api/backtest', async (req, res) => {
       annualizedReturnReal,
       maxDrawdown,
       maxDrawdownReal,
+      riskFreeRate,
+      standardDeviation,
+      sharpeRatio,
+      sortinoRatio,
+      bestYear,
+      worstYear,
       curve: monthlyCurve,
       bySymbolSummary,
       cpiAvailable: latestCpi != null,
@@ -1017,6 +1352,9 @@ app.get('/api/backtest', async (req, res) => {
             withdrawalFrequency,
             depletedDate,
           }
+        : null,
+      benchmark: benchmarkSymbol
+        ? { symbol: benchmarkSymbol, error: benchmarkError, ...(benchmarkResult || {}) }
         : null,
       fetchErrors,
       fxErrors,
