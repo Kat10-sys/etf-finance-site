@@ -34,6 +34,7 @@
   const tfsaWithdrawalsInput = document.getElementById('tfsaWithdrawalsInput');
   const tfsaHeadline = document.getElementById('tfsaHeadline');
   const tfsaStats = document.getElementById('tfsaStats');
+  const tfsaExcessWarning = document.getElementById('tfsaExcessWarning');
 
   function renderTFSA() {
     const age18Year = Math.round(Number(tfsaAge18YearInput.value) || currentYear);
@@ -49,13 +50,18 @@
     }
 
     const available = totalGranted - contributions + withdrawals;
+    const isExcess = available < 0;
     const staleNote = currentYear > TFSA_LAST_KNOWN_YEAR
       ? ` (limits beyond ${TFSA_LAST_KNOWN_YEAR} aren't in this tool yet — check CRA for the current dollar limit)`
       : '';
 
-    tfsaHeadline.innerHTML = startYear > tableYear
-      ? `You turn 18 in <strong>${age18Year}</strong>, so you don't have any TFSA room yet.`
-      : `Estimated available TFSA room: <strong>${formatMoney(Math.max(0, available))}</strong>${staleNote}.`;
+    if (startYear > tableYear) {
+      tfsaHeadline.innerHTML = `You turn 18 in <strong>${age18Year}</strong>, so you don't have any TFSA room yet.`;
+    } else if (isExcess) {
+      tfsaHeadline.innerHTML = `You've <strong class="neg">over-contributed by ${formatMoney(-available)}</strong>${staleNote}.`;
+    } else {
+      tfsaHeadline.innerHTML = `Estimated available TFSA room: <strong>${formatMoney(available)}</strong>${staleNote}.`;
+    }
 
     tfsaStats.innerHTML = `
       <div class="stat-block">
@@ -70,7 +76,23 @@
         <span class="swatch" style="background:#d97706"></span>
         <div><div class="stat-label">Withdrawn before this year</div><div class="stat-value">${formatMoney(withdrawals)}</div></div>
       </div>
+      ${isExcess ? `
+      <div class="stat-block">
+        <span class="swatch" style="background:#dc2626"></span>
+        <div><div class="stat-label">Estimated tax, per month in excess (1%)</div><div class="stat-value">${formatMoney(-available * 0.01)}</div></div>
+      </div>` : ''}
     `;
+
+    // Source: canada.ca/en/revenue-agency/services/tax/individuals/topics/
+    // tax-free-savings-account/owing-tax/excess.html ("If you owe tax on
+    // excess TFSA amounts"), verified current as of the 2025-10-14 page
+    // revision.
+    if (isExcess && startYear <= tableYear) {
+      tfsaExcessWarning.style.display = 'block';
+      tfsaExcessWarning.innerHTML = `<strong>Over-contribution penalty:</strong> If you exceed your TFSA contribution room, the Canada Revenue Agency (CRA) imposes a penalty tax of 1% per month on the highest excess amount held in the account for that month. This penalty accumulates monthly until you either withdraw the excess funds or gain enough new contribution room in a subsequent calendar year to absorb the over-contribution.`;
+    } else {
+      tfsaExcessWarning.style.display = 'none';
+    }
   }
 
   [tfsaAge18YearInput, tfsaContributionsInput, tfsaWithdrawalsInput].forEach((el) => {
