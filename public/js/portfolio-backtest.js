@@ -411,12 +411,27 @@
       type: 'bar',
       data: {
         labels,
-        datasets: symbols.map((sym) => ({
-          label: sym,
-          data: curve.map((p) => p.bySymbol[sym]),
-          backgroundColor: colorFor(sym),
-          stack: 's',
-        })),
+        datasets: [
+          ...symbols.map((sym) => ({
+            label: sym,
+            data: curve.map((p) => p.bySymbol[sym]),
+            backgroundColor: colorFor(sym),
+            stack: 's',
+            order: 1,
+          })),
+          {
+            type: 'line',
+            label: 'Total Contributed',
+            data: curve.map((p) => p.contributed),
+            borderColor: theme.muted,
+            backgroundColor: theme.muted,
+            borderDash: [6, 4],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            order: 0,
+          },
+        ],
       },
       options: {
         responsive: true,
@@ -427,7 +442,10 @@
           tooltip: {
             callbacks: {
               label: (item) => `${item.dataset.label}: ${formatMoney(item.parsed.y)}`,
-              footer: (items) => `Total: ${formatMoney(items.reduce((sum, i) => sum + i.parsed.y, 0))}`,
+              footer: (items) => {
+                const total = items.filter((i) => i.dataset.stack === 's').reduce((sum, i) => sum + i.parsed.y, 0);
+                return `Total value: ${formatMoney(total)}`;
+              },
             },
           },
         },
