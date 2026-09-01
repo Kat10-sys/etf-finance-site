@@ -483,6 +483,12 @@ function addPeriod(ts, freq) {
   return d.getTime();
 }
 
+function addYears(ts, years) {
+  const d = new Date(ts);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.getTime();
+}
+
 // Money-weighted annual rate of return via bisection on the cash-flow NPV.
 // Reduces to the standard CAGR formula when there's a single initial flow,
 // but — unlike a naive CAGR — stays meaningful when periodic contributions
@@ -636,6 +642,21 @@ app.get('/api/backtest', async (req, res) => {
       return res.status(400).json({ error: 'Enter an initial investment or a contribution amount.' });
     }
 
+    // Optional decumulation phase: once retireAfterYears elapses,
+    // contributions stop and withdrawals begin at withdrawalRate% of the
+    // balance at that moment, inflated each year after. Presence of
+    // retireAfterYears (not its value) is what turns the phase on, so
+    // "retire immediately" (0) is a valid, meaningful setting.
+    const hasRetirement = req.query.retireAfterYears != null && req.query.retireAfterYears !== '';
+    const retireAfterYears = hasRetirement ? Math.max(0, parseFloat(req.query.retireAfterYears) || 0) : null;
+    const withdrawalRate = Math.max(0, Math.min(100, parseFloat(req.query.withdrawalRate) || 0)) / 100;
+    const withdrawalInflation = Math.max(0, Math.min(20, parseFloat(req.query.withdrawalInflation) || 0)) / 100;
+    const withdrawalFrequency = req.query.withdrawalFrequency === 'annually' ? 'annually' : 'monthly';
+
+    if (hasRetirement && withdrawalRate <= 0) {
+      return res.status(400).json({ error: 'Enter a withdrawal rate greater than 0% for the retirement phase.' });
+    }
+
     // Union of every ticker's trading days in range, so a NEO-listed holiday
     // doesn't quietly drop days where a TSX- or US-listed holding still
     // traded (each ticker's own price is still resolved with "last known
@@ -650,6 +671,16 @@ app.get('/api/backtest', async (req, res) => {
     const timeline = Array.from(dateSet).sort((a, b) => a - b);
     if (timeline.length < 2) {
       return res.status(404).json({ error: 'Not enough price data in this date range.' });
+    }
+
+    let retirementDate = null;
+    if (hasRetirement) {
+      retirementDate = addYears(timeline[0], retireAfterYears);
+      if (retirementDate > timeline[timeline.length - 1]) {
+        return res.status(400).json({
+          error: `Retirement after ${retireAfterYears} year${retireAfterYears === 1 ? '' : 's'} falls after the end of the simulated period (${new Date(timeline[timeline.length - 1]).toISOString().slice(0, 10)}). Choose fewer years or a longer date range.`,
+        });
+      }
     }
 
     function priceOnOrBefore(sym, ts) {
@@ -690,22 +721,35 @@ app.get('/api/backtest', async (req, res) => {
     for (const sym of validSymbols) startPrices[sym] = priceOnOrBefore(sym, timeline[0]);
     for (const sym of validSymbols) units[sym] = (initial * weights[sym]) / startPrices[sym];
 
-    // Tracks money actually put toward each ticker (initial + its share of
-    // each contribution), independent of unit count. Rebalancing moves
-    // units between tickers but is not new money, so it never touches this
-    // -- that's what lets each ticker's "value - contributedBySymbol" (the
-    // per-holding growth reported below) sum exactly to the portfolio's
-    // total growth even when rebalancing is on.
-    const contributedBySymbol = {};
-    for (const sym of validSymbols) contributedBySymbol[sym] = initial * weights[sym];
+    // Tracks money actually left invested in each ticker: initial + its
+    // share of each contribution, minus its share of each withdrawal.
+    // Rebalancing moves units between tickers but is not a cash flow, so it
+    // never touches this -- that's what lets each ticker's
+    // "value - netInvestedBySymbol" (the per-holding growth reported below)
+    // sum exactly to the portfolio's total growth in every combination of
+    // rebalancing and retirement-phase withdrawals.
+    const netInvestedBySymbol = {};
+    for (const sym of validSymbols) netInvestedBySymbol[sym] = initial * weights[sym];
 
     let totalContributed = initial;
+    let totalWithdrawn = 0;
     let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
     let nextRebalanceDate = rebalance === 'annual' ? addPeriod(timeline[0], 'annually') : Infinity;
     let peakValue = initial;
     let maxDrawdown = 0;
     const cashflows = [{ date: timeline[0], amount: -initial }];
     const dailyCurve = [];
+
+    // Retirement/withdrawal state -- retirementValue and the year-1 dollar
+    // withdrawal are only pinned down once the simulation actually reaches
+    // retirementDate, since that's what "X% of the balance at retirement"
+    // means.
+    let retirementValue = null;
+    let annualWithdrawalInitial = null;
+    let currentAnnualWithdrawal = 0;
+    let nextWithdrawalDate = hasRetirement ? retirementDate : Infinity;
+    let nextInflationBumpDate = hasRetirement ? addPeriod(retirementDate, 'annually') : Infinity;
+    let depletedDate = null;
 
     for (const day of timeline) {
       const dayFloor = Math.floor(day / DAY_MS) * DAY_MS;
@@ -722,13 +766,19 @@ app.get('/api/backtest', async (req, res) => {
       }
 
       while (day >= nextContribDate) {
+        // Contributions stop for good once retirement is reached, even if a
+        // contribution was already scheduled for on/after that date.
+        if (hasRetirement && nextContribDate >= retirementDate) {
+          nextContribDate = Infinity;
+          break;
+        }
         totalContributed += contribution;
         cashflows.push({ date: nextContribDate, amount: -contribution });
         for (const sym of validSymbols) {
           const price = priceOnOrBefore(sym, nextContribDate);
           if (price) {
             units[sym] += (contribution * weights[sym]) / price;
-            contributedBySymbol[sym] += contribution * weights[sym];
+            netInvestedBySymbol[sym] += contribution * weights[sym];
           }
         }
         nextContribDate = addPeriod(nextContribDate, frequency);
@@ -743,13 +793,57 @@ app.get('/api/backtest', async (req, res) => {
         nextRebalanceDate = addPeriod(nextRebalanceDate, 'annually');
       }
 
+      // Withdrawals sell proportionally across whatever is currently held
+      // (not target weights), so a drifted or non-rebalanced portfolio never
+      // gets asked to sell more of a holding than it actually has.
+      while (day >= nextWithdrawalDate) {
+        if (retirementValue == null) {
+          retirementValue = portfolioValueAt(retirementDate);
+          annualWithdrawalInitial = retirementValue * withdrawalRate;
+          currentAnnualWithdrawal = annualWithdrawalInitial;
+        }
+        while (nextInflationBumpDate <= nextWithdrawalDate) {
+          currentAnnualWithdrawal *= 1 + withdrawalInflation;
+          nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
+        }
+
+        const periodsPerYear = withdrawalFrequency === 'annually' ? 1 : 12;
+        const installment = currentAnnualWithdrawal / periodsPerYear;
+        const bySymbolNow = valuesBySymbolAt(nextWithdrawalDate);
+        const totalValueNow = validSymbols.reduce((sum, sym) => sum + bySymbolNow[sym], 0);
+        const actualWithdrawal = Math.min(installment, totalValueNow);
+
+        if (totalValueNow > 0 && actualWithdrawal > 0) {
+          for (const sym of validSymbols) {
+            const shareOfPortfolio = bySymbolNow[sym] / totalValueNow;
+            const symWithdrawal = actualWithdrawal * shareOfPortfolio;
+            const price = priceOnOrBefore(sym, nextWithdrawalDate);
+            if (price) units[sym] -= symWithdrawal / price;
+            netInvestedBySymbol[sym] -= symWithdrawal;
+          }
+        }
+
+        totalWithdrawn += actualWithdrawal;
+        cashflows.push({ date: nextWithdrawalDate, amount: actualWithdrawal });
+
+        if (actualWithdrawal < installment - 1e-6) {
+          // Ran out of money -- stop the account at zero rather than
+          // continuing to "withdraw" from an empty portfolio.
+          depletedDate = nextWithdrawalDate;
+          for (const sym of validSymbols) units[sym] = 0;
+          nextWithdrawalDate = Infinity;
+        } else {
+          nextWithdrawalDate = addPeriod(nextWithdrawalDate, withdrawalFrequency);
+        }
+      }
+
       const bySymbol = valuesBySymbolAt(day);
       const value = validSymbols.reduce((sum, sym) => sum + bySymbol[sym], 0);
       if (value > peakValue) peakValue = value;
       const drawdown = peakValue > 0 ? (peakValue - value) / peakValue : 0;
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
 
-      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed, bySymbol });
+      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed, withdrawn: totalWithdrawn, bySymbol });
     }
 
     const finalEntry = dailyCurve[dailyCurve.length - 1];
@@ -775,8 +869,8 @@ app.get('/api/backtest', async (req, res) => {
 
     const bySymbolSummary = validSymbols.map((sym) => {
       const endingValue = finalEntry.bySymbol[sym];
-      const contributed = contributedBySymbol[sym];
-      return { symbol: sym, weight: weights[sym], contributed, endingValue, growth: endingValue - contributed };
+      const netInvested = netInvestedBySymbol[sym];
+      return { symbol: sym, weight: weights[sym], contributed: netInvested, endingValue, growth: endingValue - netInvested };
     });
 
     res.json({
@@ -791,12 +885,25 @@ app.get('/api/backtest', async (req, res) => {
       frequency,
       rebalance,
       totalContributed,
+      totalWithdrawn,
       endingValue: finalEntry.value,
-      totalGrowth: finalEntry.value - totalContributed,
+      totalGrowth: finalEntry.value - totalContributed + totalWithdrawn,
       annualizedReturn,
       maxDrawdown,
       curve: monthlyCurve,
       bySymbolSummary,
+      retirement: hasRetirement
+        ? {
+            retireAfterYears,
+            retirementDate,
+            retirementValue,
+            annualWithdrawalInitial,
+            withdrawalRate,
+            withdrawalInflation,
+            withdrawalFrequency,
+            depletedDate,
+          }
+        : null,
       fetchErrors,
       fxErrors,
     });

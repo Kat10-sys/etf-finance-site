@@ -29,6 +29,13 @@
   const initialInput = document.getElementById('initialInput');
   const contributionInput = document.getElementById('contributionInput');
   const frequencyInput = document.getElementById('frequencyInput');
+  const retirementToggle = document.getElementById('retirementToggle');
+  const retirementFields = document.getElementById('retirementFields');
+  const retirementHint = document.getElementById('retirementHint');
+  const retireAfterYearsInput = document.getElementById('retireAfterYearsInput');
+  const withdrawalRateInput = document.getElementById('withdrawalRateInput');
+  const withdrawalInflationInput = document.getElementById('withdrawalInflationInput');
+  const withdrawalFrequencyInput = document.getElementById('withdrawalFrequencyInput');
   const rebalanceButtons = document.querySelectorAll('[data-rebalance]');
   const currencyButtons = document.querySelectorAll('[data-currency]');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
@@ -241,6 +248,23 @@
     });
   });
 
+  function setRetirementFieldsVisible(visible) {
+    retirementFields.style.display = visible ? 'grid' : 'none';
+    retirementHint.style.display = visible ? 'block' : 'none';
+  }
+
+  retirementToggle.addEventListener('change', () => {
+    setRetirementFieldsVisible(retirementToggle.checked);
+    updateURL();
+    if (state.lastResults) runBacktest();
+  });
+  [retireAfterYearsInput, withdrawalRateInput, withdrawalInflationInput, withdrawalFrequencyInput].forEach((el) => {
+    el.addEventListener('change', () => {
+      updateURL();
+      if (state.lastResults && retirementToggle.checked) runBacktest();
+    });
+  });
+
   runBtn.addEventListener('click', runBacktest);
 
   if (copyLinkBtn) {
@@ -256,7 +280,7 @@
   }
 
   window.addEventListener('themechange', () => {
-    if (state.lastResults) renderChart(state.lastResults.curve, state.lastResults.symbols);
+    if (state.lastResults) renderChart(state.lastResults.curve, state.lastResults.symbols, state.lastResults.retirement);
   });
 
   // ---------- shareable URL ----------
@@ -276,6 +300,12 @@
     params.set('initial', initialInput.value || '0');
     params.set('contribution', contributionInput.value || '0');
     params.set('frequency', frequencyInput.value);
+    if (retirementToggle.checked) {
+      params.set('retireAfterYears', retireAfterYearsInput.value || '0');
+      params.set('withdrawalRate', withdrawalRateInput.value || '0');
+      params.set('withdrawalInflation', withdrawalInflationInput.value || '0');
+      params.set('withdrawalFrequency', withdrawalFrequencyInput.value);
+    }
     const qs = params.toString();
     const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', newUrl);
@@ -317,6 +347,16 @@
     const frequency = params.get('frequency');
     if (frequency === 'monthly' || frequency === 'annually') frequencyInput.value = frequency;
 
+    if (params.get('retireAfterYears') != null) {
+      retirementToggle.checked = true;
+      setRetirementFieldsVisible(true);
+      retireAfterYearsInput.value = params.get('retireAfterYears');
+      if (params.get('withdrawalRate') != null) withdrawalRateInput.value = params.get('withdrawalRate');
+      if (params.get('withdrawalInflation') != null) withdrawalInflationInput.value = params.get('withdrawalInflation');
+      const withdrawalFrequency = params.get('withdrawalFrequency');
+      if (withdrawalFrequency === 'monthly' || withdrawalFrequency === 'annually') withdrawalFrequencyInput.value = withdrawalFrequency;
+    }
+
     renderWeightList();
     if (state.entries.length) runBacktest();
   }
@@ -338,6 +378,10 @@
       showStatus('Enter an initial investment or a contribution amount.', true);
       return;
     }
+    if (retirementToggle.checked && Math.max(0, Number(withdrawalRateInput.value) || 0) <= 0) {
+      showStatus('Enter a withdrawal rate greater than 0% for the retirement phase.', true);
+      return;
+    }
 
     runBtn.disabled = true;
     showStatus('Fetching price and dividend history…');
@@ -355,6 +399,12 @@
       if (state.range === 'custom') {
         params.set('start', state.customStart);
         if (state.customEnd) params.set('end', state.customEnd);
+      }
+      if (retirementToggle.checked) {
+        params.set('retireAfterYears', String(Math.max(0, Number(retireAfterYearsInput.value) || 0)));
+        params.set('withdrawalRate', String(Math.max(0, Number(withdrawalRateInput.value) || 0)));
+        params.set('withdrawalInflation', String(Math.max(0, Number(withdrawalInflationInput.value) || 0)));
+        params.set('withdrawalFrequency', withdrawalFrequencyInput.value);
       }
       const res = await fetch(`/api/backtest?${params.toString()}`);
       const data = await res.json();
@@ -375,9 +425,9 @@
       rangeMeta.textContent = `${formatDate(data.startDate)} → ${formatDate(data.endDate)}`;
 
       renderSummary(data);
-      renderHoldingTable(data.bySymbolSummary);
-      renderChart(data.curve, data.symbols);
-      renderTable(data.curve, data.symbols);
+      renderHoldingTable(data.bySymbolSummary, data.retirement);
+      renderChart(data.curve, data.symbols, data.retirement);
+      renderTable(data.curve, data.symbols, data.retirement);
     } catch (e) {
       showStatus(e.message, true);
     } finally {
@@ -389,28 +439,48 @@
     const xirrText = data.annualizedReturn != null ? `${(data.annualizedReturn * 100).toFixed(2)}%` : 'n/a';
     const ddText = `${(data.maxDrawdown * 100).toFixed(1)}%`;
     const rebalanceText = data.rebalance === 'annual' ? 'annual rebalancing' : 'no rebalancing';
+    const retirement = data.retirement;
 
-    backtestHeadline.innerHTML = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(data.endingValue)}</strong>, an annualized return of <strong>${xirrText}</strong>.`;
+    let headline;
+    if (retirement) {
+      const rateText = `${(retirement.withdrawalRate * 100).toFixed(1)}%`;
+      if (retirement.depletedDate) {
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirement.retirementValue)}</strong> by retirement, then been <strong class="neg">fully depleted on ${formatDate(retirement.depletedDate)}</strong> withdrawing ${rateText} of the balance per year (inflation-adjusted).`;
+      } else {
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirement.retirementValue)}</strong> by retirement, then survived withdrawals of ${rateText} of the balance per year (inflation-adjusted), ending at <strong>${formatMoney(data.endingValue)}</strong>.`;
+      }
+    } else {
+      headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(data.endingValue)}</strong>, an annualized return of <strong>${xirrText}</strong>.`;
+    }
+    backtestHeadline.innerHTML = headline;
 
-    backtestStats.innerHTML = `
+    const stats = [
+      { color: '#0d9488', label: 'Total contributed', value: formatMoney(data.totalContributed) },
+    ];
+    if (retirement) {
+      stats.push({ color: '#d97706', label: 'Total withdrawn', value: formatMoney(data.totalWithdrawn) });
+    }
+    stats.push({ color: '#2563eb', label: 'Investment growth', value: formatMoney(data.totalGrowth) });
+    stats.push({ color: '#7c3aed', label: 'Annualized return (XIRR)', value: xirrText });
+    stats.push({ color: '#dc2626', label: 'Max drawdown', value: ddText });
+    if (retirement) {
+      stats.push(retirement.depletedDate
+        ? { color: '#dc2626', label: 'Depleted on', value: formatDate(retirement.depletedDate) }
+        : { color: '#059669', label: 'Balance at retirement', value: formatMoney(retirement.retirementValue) });
+    }
+
+    backtestStats.innerHTML = stats.map((s) => `
       <div class="stat-block">
-        <span class="swatch" style="background:#0d9488"></span>
-        <div><div class="stat-label">Total contributed</div><div class="stat-value">${formatMoney(data.totalContributed)}</div></div>
+        <span class="swatch" style="background:${s.color}"></span>
+        <div><div class="stat-label">${s.label}</div><div class="stat-value">${s.value}</div></div>
       </div>
-      <div class="stat-block">
-        <span class="swatch" style="background:#2563eb"></span>
-        <div><div class="stat-label">Investment growth</div><div class="stat-value">${formatMoney(data.totalGrowth)}</div></div>
-      </div>
-      <div class="stat-block">
-        <span class="swatch" style="background:#dc2626"></span>
-        <div><div class="stat-label">Max drawdown</div><div class="stat-value">${ddText}</div></div>
-      </div>
-    `;
+    `).join('');
   }
 
-  function renderChart(curve, symbols) {
+  function renderChart(curve, symbols, retirement) {
     const theme = chartTheme();
     const labels = curve.map((p) => formatDate(p.date));
+    const netInvestedLabel = retirement ? 'Net Invested (Contributed − Withdrawn)' : 'Total Contributed';
 
     const ctx = document.getElementById('backtestChart').getContext('2d');
     if (chart) chart.destroy();
@@ -428,8 +498,8 @@
           })),
           {
             type: 'line',
-            label: 'Total Contributed',
-            data: curve.map((p) => p.contributed),
+            label: netInvestedLabel,
+            data: curve.map((p) => p.contributed - (p.withdrawn || 0)),
             borderColor: theme.muted,
             backgroundColor: theme.muted,
             borderDash: [6, 4],
@@ -464,24 +534,27 @@
     });
   }
 
-  function renderTable(curve, symbols) {
+  function renderTable(curve, symbols, retirement) {
     backtestTableHead.innerHTML = `
       <tr>
         <th>Date</th>
         ${symbols.map((sym) => `<th>${sym}</th>`).join('')}
         <th>Total Contributed</th>
+        ${retirement ? '<th>Total Withdrawn</th>' : ''}
         <th>Total Growth</th>
         <th>Total Value</th>
       </tr>
     `;
     backtestTableBody.innerHTML = '';
     curve.forEach((p) => {
-      const growth = p.value - p.contributed;
+      const withdrawn = p.withdrawn || 0;
+      const growth = p.value - p.contributed + withdrawn;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${formatDate(p.date)}</td>
         ${symbols.map((sym) => `<td>${formatMoney(p.bySymbol[sym])}</td>`).join('')}
         <td>${formatMoney(p.contributed)}</td>
+        ${retirement ? `<td>${formatMoney(withdrawn)}</td>` : ''}
         <td>${formatMoney(growth)}</td>
         <td>${formatMoney(p.value)}</td>
       `;
@@ -489,7 +562,8 @@
     });
   }
 
-  function renderHoldingTable(bySymbolSummary) {
+  function renderHoldingTable(bySymbolSummary, retirement) {
+    document.getElementById('holdingContributedHeader').textContent = retirement ? 'Net Contributed' : 'Contributed';
     holdingTableBody.innerHTML = '';
     bySymbolSummary.forEach((h) => {
       const growthPct = h.contributed > 0 ? (h.growth / h.contributed) * 100 : null;

@@ -82,6 +82,34 @@
         </label>
       </div>
 
+      <label class="checkbox-row">
+        <input type="checkbox" id="retirementToggle">
+        <span>Simulate a retirement/withdrawal phase</span>
+      </label>
+
+      <div class="form-grid" id="retirementFields" style="display:none">
+        <label class="form-field">
+          <span>Years until retirement</span>
+          <input type="number" id="retireAfterYearsInput" value="10" min="0" max="80" step="1" inputmode="numeric">
+        </label>
+        <label class="form-field">
+          <span>Withdrawal rate (% of balance at retirement, per year)</span>
+          <input type="number" id="withdrawalRateInput" value="4" min="0.1" max="100" step="0.1" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Inflation rate for withdrawals</span>
+          <input type="number" id="withdrawalInflationInput" value="2" min="0" max="20" step="0.1" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Withdrawal frequency</span>
+          <select id="withdrawalFrequencyInput">
+            <option value="monthly">Monthly</option>
+            <option value="annually">Annually</option>
+          </select>
+        </label>
+      </div>
+      <div class="hint" id="retirementHint" style="display:none">The withdrawal amount is set once, as a percentage of the portfolio's value at retirement, then grows with inflation every year after — it does not recalculate against the current balance.</div>
+
       <div class="currency-row">
         <span class="currency-label">Rebalancing:</span>
         <div class="currency-buttons">
@@ -119,7 +147,7 @@
               <tr>
                 <th>Symbol</th>
                 <th>Weight</th>
-                <th>Contributed</th>
+                <th id="holdingContributedHeader">Contributed</th>
                 <th>Ending Value</th>
                 <th>Growth</th>
               </tr>
@@ -153,7 +181,7 @@
 
   <footer>
     <div class="container">
-      <strong>This page simulates historical performance, not future results.</strong> Figures are computed from actual past price and dividend data with dividends assumed reinvested, and do not account for taxes, trading fees, fund expense ratios, currency-conversion costs, or your personal financial situation. Rebalancing and contribution timing are simplified assumptions and do not reflect the exact behavior of any real account. Past performance does not predict future returns. Nothing on this page recommends buying, selling, or holding any specific investment, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making investment decisions.
+      <strong>This page simulates historical performance, not future results.</strong> Figures are computed from actual past price and dividend data with dividends assumed reinvested, and do not account for taxes, trading fees, fund expense ratios, currency-conversion costs, or your personal financial situation. Rebalancing, contribution, and withdrawal timing are simplified assumptions and do not reflect the exact behavior of any real account. The retirement/withdrawal simulation replays a single historical sequence of returns for your chosen tickers and dates — it is not a Monte Carlo or "safe withdrawal rate" analysis across many possible scenarios, and a portfolio surviving (or not) in this one sequence says nothing about how it would fare starting on a different date. Past performance does not predict future returns. Nothing on this page recommends buying, selling, or holding any specific investment, savings rate, or withdrawal strategy, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making retirement or investment decisions.
     </div>
   </footer>
 
