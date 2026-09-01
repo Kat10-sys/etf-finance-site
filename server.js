@@ -530,7 +530,7 @@ app.get('/api/exposure', async (req, res) => {
     }
 
     const topHoldings = quoteSummary.topHoldings || {};
-    const sectorWeightings = (topHoldings.sectorWeightings || [])
+    let sectorWeightings = (topHoldings.sectorWeightings || [])
       .map((entry) => {
         const [sector, weight] = Object.entries(entry)[0] || [];
         return sector ? { label: humanizeSector(sector), weight } : null;
@@ -582,6 +582,9 @@ app.get('/api/exposure', async (req, res) => {
       geoWeightings = exposureOverride.geoWeightings;
       geoIsEstimate = true;
       geoNote = exposureOverride.note;
+    }
+    if (exposureOverride?.sectorWeightings) {
+      sectorWeightings = exposureOverride.sectorWeightings;
     }
 
     let expenseRatio = quoteSummary.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio || null;

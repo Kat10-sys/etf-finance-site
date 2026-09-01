@@ -1,0 +1,19 @@
+{
+  "symbol": "HHIS.TO",
+  "asOf": "2026-05-27",
+  "source": "https://harvestportfolios.com/wp-content/uploads/hhis/pdf/fund-facts/en/hhis_ff.pdf — Harvest's own regulatory ETF Facts document for HHIS Class A Units, dated May 27, 2026 (MER as of Dec 31, 2025; sector mix as of Apr 30, 2026).",
+  "note": "HHIS holds a basket of ~20 Harvest single-stock \"Enhanced High Income\" ETFs (Amazon, Apple, Microsoft, Alphabet, NVIDIA, etc.), all referencing individual US-listed companies. Yahoo Finance only returns one of these ~20 holdings, so the app's usual holdings-based geography estimate is derived from under 10% of the actual portfolio. This is the issuer's own published country/sector breakdown instead.",
+  "expenseRatio": 0.0185,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HHIS.TO. This is Harvest's own published Management Expense Ratio (MER) from its ETF Facts document — the fund itself charges a 0% management fee, but is subject to the fees of its underlying single-stock ETFs, which this MER reflects.",
+  "sectorWeightings": [
+    { "label": "Technology", "weight": 0.480 },
+    { "label": "Communication Services", "weight": 0.203 },
+    { "label": "Consumer Cyclical", "weight": 0.134 },
+    { "label": "Financial Services", "weight": 0.068 },
+    { "label": "Healthcare", "weight": 0.059 },
+    { "label": "Consumer Defensive", "weight": 0.057 }
+  ],
+  "geoWeightings": [
+    { "label": "United States", "weight": 1.0 }
+  ]
+}
