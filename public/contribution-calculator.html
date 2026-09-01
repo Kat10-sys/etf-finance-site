@@ -83,6 +83,10 @@
           <span id="rrspPensionLabel">Pension adjustment, prior year (if any)</span>
           <input type="number" id="rrspPensionInput" value="0" min="0" step="100" inputmode="decimal">
         </label>
+        <label class="form-field">
+          <span id="rrspContributedLabel">RRSP contributions made this year</span>
+          <input type="number" id="rrspContributedInput" value="0" min="0" step="100" inputmode="decimal">
+        </label>
       </div>
       <div class="disclaimer-note">
         RRSP contributions can generally be made until December 31 of the year you turn 71. If you belong to an employer pension or deferred profit-sharing plan, your pension adjustment appears on your T4 slip — leave it at 0 if this doesn't apply to you.
@@ -92,6 +96,8 @@
     <div class="panel" id="rrspSummaryPanel">
       <div class="growth-headline" id="rrspHeadline"></div>
       <div class="growth-stats" id="rrspStats"></div>
+      <div class="hint" id="rrspBufferNote" style="display:none"></div>
+      <div class="warning-note" id="rrspExcessWarning" style="display:none"></div>
     </div>
   </div>
 

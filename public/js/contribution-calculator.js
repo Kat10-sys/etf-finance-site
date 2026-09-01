@@ -100,17 +100,28 @@
   });
 
   // ---------- RRSP ----------
+  // RRSP over-contribution rule, per CRA (canada.ca "Excess Contributions",
+  // RRSPs/PRPPs/SPPs topic) -- unlike TFSA, there's a $2,000 lifetime buffer
+  // (available if you were 18+ at any point in the year) before the 1%/month
+  // tax applies, and the tax is charged only on the amount past that buffer,
+  // not on the buffer itself.
+  const RRSP_EXCESS_BUFFER = 2000;
+
   const rrspIncomeInput = document.getElementById('rrspIncomeInput');
   const rrspCarryforwardInput = document.getElementById('rrspCarryforwardInput');
   const rrspPensionInput = document.getElementById('rrspPensionInput');
+  const rrspContributedInput = document.getElementById('rrspContributedInput');
   const rrspHeadline = document.getElementById('rrspHeadline');
   const rrspStats = document.getElementById('rrspStats');
+  const rrspBufferNote = document.getElementById('rrspBufferNote');
+  const rrspExcessWarning = document.getElementById('rrspExcessWarning');
 
   function renderRRSP() {
     const priorYear = currentYear - 1;
     const income = Math.max(0, Number(rrspIncomeInput.value) || 0);
     const carryforward = Math.max(0, Number(rrspCarryforwardInput.value) || 0);
     const pensionAdjustment = Math.max(0, Number(rrspPensionInput.value) || 0);
+    const contributed = Math.max(0, Number(rrspContributedInput.value) || 0);
 
     const dollarMax = RRSP_MAX[currentYear] || RRSP_MAX[RRSP_LAST_KNOWN_YEAR];
     const staleNote = currentYear > RRSP_LAST_KNOWN_YEAR
@@ -119,8 +130,17 @@
 
     const newRoom = Math.max(0, Math.min(income * 0.18, dollarMax) - pensionAdjustment);
     const totalAvailable = newRoom + carryforward;
+    const excess = contributed - totalAvailable;
+    const isPenalized = excess > RRSP_EXCESS_BUFFER;
+    const isBuffered = excess > 0 && !isPenalized;
 
-    rrspHeadline.innerHTML = `Estimated available RRSP room for <strong>${currentYear}</strong>: <strong>${formatMoney(totalAvailable)}</strong>${staleNote}.`;
+    if (isPenalized) {
+      rrspHeadline.innerHTML = `You've <strong class="neg">over-contributed by ${formatMoney(excess)}</strong>, which is ${formatMoney(excess - RRSP_EXCESS_BUFFER)} beyond your $2,000 lifetime buffer${staleNote}.`;
+    } else if (isBuffered) {
+      rrspHeadline.innerHTML = `Estimated available RRSP room for <strong>${currentYear}</strong>: <strong>$0</strong> — you're ${formatMoney(excess)} into your $2,000 lifetime over-contribution buffer${staleNote}.`;
+    } else {
+      rrspHeadline.innerHTML = `Estimated available RRSP room for <strong>${currentYear}</strong>: <strong>${formatMoney(totalAvailable - contributed)}</strong>${staleNote}.`;
+    }
 
     rrspStats.innerHTML = `
       <div class="stat-block">
@@ -131,13 +151,40 @@
         <span class="swatch" style="background:#2563eb"></span>
         <div><div class="stat-label">Carried forward, unused</div><div class="stat-value">${formatMoney(carryforward)}</div></div>
       </div>
+      <div class="stat-block">
+        <span class="swatch" style="background:#d97706"></span>
+        <div><div class="stat-label">Contributed, ${currentYear}</div><div class="stat-value">${formatMoney(contributed)}</div></div>
+      </div>
+      ${isPenalized ? `
+      <div class="stat-block">
+        <span class="swatch" style="background:#dc2626"></span>
+        <div><div class="stat-label">Estimated tax, per month in excess (1%)</div><div class="stat-value">${formatMoney((excess - RRSP_EXCESS_BUFFER) * 0.01)}</div></div>
+      </div>` : ''}
     `;
+
+    if (isPenalized) {
+      rrspBufferNote.style.display = 'none';
+      rrspExcessWarning.style.display = 'block';
+      // Source: canada.ca/en/revenue-agency/services/tax/individuals/topics/
+      // rrsps-related-plans/contributing-a-rrsp-prpp/what-happens-you-over-
+      // your-rrsp-prpp-deduction-limit.html ("Excess Contributions"),
+      // verified directly against the live page.
+      rrspExcessWarning.innerHTML = `<strong>Over-contribution penalty:</strong> The CRA allows a $2,000 lifetime buffer over your RRSP deduction limit (if you were 18 or older at any point this year) before any penalty applies. Beyond that buffer, the CRA imposes a tax of 1% per month on the excess amount, accumulating until you withdraw the excess or gain enough new deduction limit in a later year to absorb it. You'd generally need to file Form T1-OVP within 90 days of the year's end.`;
+    } else if (isBuffered) {
+      rrspExcessWarning.style.display = 'none';
+      rrspBufferNote.style.display = 'block';
+      rrspBufferNote.textContent = `No CRA penalty applies yet — you're within the $2,000 lifetime over-contribution buffer. That buffer exists for estimation error, not as extra room to use on purpose, and any of it you use here isn't available to cushion a future mistake.`;
+    } else {
+      rrspBufferNote.style.display = 'none';
+      rrspExcessWarning.style.display = 'none';
+    }
   }
 
   document.getElementById('rrspIncomeLabel').textContent = `Earned income, ${currentYear - 1}`;
+  document.getElementById('rrspContributedLabel').textContent = `RRSP contributions made, ${currentYear}`;
   document.getElementById('rrspPensionLabel').textContent = `Pension adjustment, ${currentYear - 1} (if any)`;
 
-  [rrspIncomeInput, rrspCarryforwardInput, rrspPensionInput].forEach((el) => {
+  [rrspIncomeInput, rrspCarryforwardInput, rrspPensionInput, rrspContributedInput].forEach((el) => {
     el.addEventListener('input', renderRRSP);
   });
 
