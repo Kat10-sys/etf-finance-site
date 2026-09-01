@@ -1,0 +1,6 @@
+{
+  "symbol": "HYLD.TO",
+  "asOf": "2026-09-01",
+  "expenseRatio": 0.0187,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HYLD.TO. This is Hamilton's own published Management Expense Ratio (MER) from its ETF Facts document dated January 8, 2026 (reporting period ended June 30, 2025) -- a fund-of-funds holding other Hamilton covered-call ETFs, each carrying its own layer of fees, plus leverage financing costs."
+}

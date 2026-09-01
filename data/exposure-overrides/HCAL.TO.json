@@ -1,0 +1,11 @@
+{
+  "symbol": "HCAL.TO",
+  "asOf": "2026-09-01",
+  "source": "Yahoo Finance's holdings data for HCAL.TO",
+  "note": "HCAL's sole disclosed holding is HAMILTON CHAMPIONS Cndn Bank Eql-Wght Idx ETF, an all-Canadian bank index fund -- the app's name-based geography heuristic didn't recognize the abbreviated \"Cndn\" and classified it as \"Other / Unclassified\" instead. Corrected to Canada directly; the >100% weight reflects HCAL's leveraged exposure to the underlying fund.",
+  "geoWeightings": [
+    { "label": "Canada", "weight": 1.0 }
+  ],
+  "expenseRatio": 0.0208,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HCAL.TO. This is Hamilton's own published Management Expense Ratio (MER) from its ETF Facts document dated August 14, 2025 (reporting period ended Dec 31, 2024) -- a fund-of-one holding another Hamilton index ETF plus leverage financing costs."
+}

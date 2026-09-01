@@ -1,0 +1,6 @@
+{
+  "symbol": "HDIV.TO",
+  "asOf": "2026-09-01",
+  "expenseRatio": 0.0255,
+  "expenseRatioNote": "Yahoo Finance reports no expense ratio for HDIV.TO. This is Hamilton's own published Management Expense Ratio (MER) from its ETF Facts document dated August 14, 2025 (reporting period ended Dec 31, 2024) -- a fund-of-funds holding other Hamilton covered-call ETFs, each carrying its own layer of fees, plus leverage financing costs."
+}
