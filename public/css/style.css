@@ -188,7 +188,7 @@ a { color: inherit; }
 
 .features {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
   padding: 0 0 96px;
 }
@@ -245,6 +245,7 @@ footer {
   color: var(--text);
 }
 .ticker-input-row input:focus { outline: 2px solid var(--teal-light); outline-offset: -1px; }
+.ticker-input-row input#weightInput { flex: 0 0 110px; }
 .hint {
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -283,6 +284,61 @@ footer {
 .chip .swatch {
   width: 10px; height: 10px; border-radius: 50%;
 }
+
+.weight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+.weight-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  padding: 8px 10px 8px 14px;
+}
+.weight-row .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.weight-row .weight-symbol { font-weight: 700; color: var(--chip-text); min-width: 90px; }
+.weight-row .weight-pct-input {
+  width: 70px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-family: inherit;
+  text-align: right;
+}
+.weight-row .weight-pct-sign { color: var(--text-muted); font-size: 0.82rem; }
+.weight-row button {
+  margin-left: auto;
+  border: none;
+  background: rgba(110, 231, 183, 0.18);
+  color: var(--chip-text);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.weight-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.weight-total-row.balanced { color: var(--green); }
+.weight-total-row.unbalanced { color: var(--red); }
 
 .range-row {
   display: flex;
@@ -602,4 +658,9 @@ table.results-table .symbol-inner {
   .hero h1 { font-size: 1.9rem; }
   .pie-row { grid-template-columns: 1fr; }
   .range-row { flex-direction: column; align-items: flex-start; }
+  .ticker-input-row { flex-wrap: wrap; }
+  .ticker-input-row input#weightInput { flex: 1 1 auto; }
+  .ticker-input-row button { flex: 1 1 100%; }
+  .weight-row { flex-wrap: wrap; }
+  .weight-total-row { flex-direction: column; align-items: flex-start; gap: 4px; }
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
-<title>ETF Comparison Tool — Northbeam Finance</title>
+<title>Portfolio Backtest — Northbeam Finance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css" />
@@ -17,10 +17,10 @@
       <div class="nav-right">
         <div class="nav-links" id="navLinks">
           <a href="/">Home</a>
-          <a href="/calculator.html" class="active">ETF Comparison</a>
+          <a href="/calculator.html">ETF Comparison</a>
           <a href="/growth-calculator.html">Growth Calculator</a>
           <a href="/contribution-calculator.html">Contribution Room</a>
-          <a href="/portfolio-backtest.html">Portfolio Backtest</a>
+          <a href="/portfolio-backtest.html" class="active">Portfolio Backtest</a>
         </div>
         <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
@@ -30,25 +30,26 @@
 
   <div class="container">
     <div class="page-header">
-      <h1>ETF &amp; Stock Comparison</h1>
-      <p>Add US, .TO (TSX), or .NE (NEO / Cboe Canada) to compare performance and portfolio exposure. Add one ticker at a time.</p>
+      <h1>Portfolio Backtest</h1>
+      <p>Build a multi-ticker portfolio with target weights and see how it would have performed historically, using actual price and dividend history.</p>
     </div>
 
     <div class="panel">
       <div class="ticker-input-row">
         <input id="tickerInput" type="text" placeholder="e.g. VOO, VFV.TO, HXT.NE" autocomplete="off" />
+        <input id="weightInput" type="number" placeholder="Weight %" min="0" max="100" step="1" inputmode="decimal" />
         <button class="btn" id="addTickerBtn">Add</button>
       </div>
       <div class="hint">Leave off any suffix for US tickers. Use <strong>.TO</strong> for Toronto Stock Exchange, <strong>.NE</strong> for NEO / Cboe Canada. Up to 8 tickers.</div>
-      <div class="chips" id="chipsContainer"></div>
+
+      <div class="weight-list" id="weightList"></div>
+      <div class="weight-total-row" id="weightTotalRow" style="display:none">
+        <span id="weightTotalLabel"></span>
+        <button class="link-btn" id="splitEvenlyBtn" type="button">Split evenly</button>
+      </div>
 
       <div class="range-row">
         <div class="range-buttons">
-          <button class="range-btn" data-range="1w">1 Week</button>
-          <button class="range-btn" data-range="1mo">1 Month</button>
-          <button class="range-btn" data-range="3mo">3 Months</button>
-          <button class="range-btn" data-range="6mo">6 Months</button>
-          <button class="range-btn" data-range="ytd">YTD</button>
           <button class="range-btn" data-range="1y">1 Year</button>
           <button class="range-btn" data-range="3y">3 Years</button>
           <button class="range-btn" data-range="5y">5 Years</button>
@@ -63,64 +64,83 @@
         <label>To <input type="date" id="customEndInput"></label>
       </div>
 
+      <div class="form-grid" style="margin-top:20px">
+        <label class="form-field">
+          <span>Initial investment</span>
+          <input type="number" id="initialInput" value="10000" min="0" step="100" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Periodic contribution</span>
+          <input type="number" id="contributionInput" value="0" min="0" step="10" inputmode="decimal">
+        </label>
+        <label class="form-field">
+          <span>Contribution frequency</span>
+          <select id="frequencyInput">
+            <option value="monthly">Monthly</option>
+            <option value="annually">Annually</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="currency-row">
+        <span class="currency-label">Rebalancing:</span>
+        <div class="currency-buttons">
+          <button class="currency-btn active" data-rebalance="annual">Annual rebalancing</button>
+          <button class="currency-btn" data-rebalance="none">No rebalancing (buy &amp; hold)</button>
+        </div>
+      </div>
+
       <div class="currency-row">
         <span class="currency-label">Show in:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-currency="native">Native</button>
-          <button class="currency-btn" data-currency="CAD">CAD</button>
+          <button class="currency-btn active" data-currency="CAD">CAD</button>
           <button class="currency-btn" data-currency="USD">USD</button>
         </div>
       </div>
 
       <div class="action-row">
-        <button class="btn" id="compareBtn" disabled>Compare</button>
+        <button class="btn" id="runBtn" disabled>Run Backtest</button>
         <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
       </div>
       <div class="status-line" id="statusLine"></div>
     </div>
 
     <div id="resultsSection">
+      <div class="panel" id="summaryPanel">
+        <div class="growth-headline" id="backtestHeadline"></div>
+        <div class="growth-stats" id="backtestStats"></div>
+      </div>
+
       <div class="panel chart-card">
-        <div class="metric-buttons" id="metricButtons">
-          <button class="metric-btn" data-metric="priceReturn">Price Return</button>
-          <button class="metric-btn" data-metric="dividendPlusCash">Dividend + Cash</button>
-          <button class="metric-btn active" data-metric="totalReturnDRIP">Total Return (DRIP)</button>
-        </div>
-        <div class="chart-wrap"><canvas id="returnChart"></canvas></div>
+        <div class="chart-wrap"><canvas id="backtestChart"></canvas></div>
       </div>
 
       <div class="panel">
         <div class="table-scroll">
-          <table class="results-table" id="resultsTable">
+          <table class="results-table" id="backtestTable">
             <thead>
               <tr>
-                <th>Ticker</th>
-                <th>Period</th>
-                <th>Price Return</th>
-                <th>Dividend + Cash</th>
-                <th>Total Return (DRIP)</th>
-                <th>Project</th>
+                <th>Date</th>
+                <th>Contributed</th>
+                <th>Growth</th>
+                <th>Value</th>
               </tr>
             </thead>
-            <tbody id="resultsTableBody"></tbody>
+            <tbody id="backtestTableBody"></tbody>
           </table>
         </div>
       </div>
-
-      <h2 class="section-title">Sector &amp; Geographic Exposure</h2>
-      <p class="section-sub">Based on each fund's most recently disclosed holdings.</p>
-      <div class="exposure-grid" id="exposureGrid"></div>
     </div>
   </div>
 
   <footer>
     <div class="container">
-      Data sourced from Yahoo Finance. For informational purposes only — not investment advice.
+      <strong>This page simulates historical performance, not future results.</strong> Figures are computed from actual past price and dividend data with dividends assumed reinvested, and do not account for taxes, trading fees, fund expense ratios, currency-conversion costs, or your personal financial situation. Rebalancing and contribution timing are simplified assumptions and do not reflect the exact behavior of any real account. Past performance does not predict future returns. Nothing on this page recommends buying, selling, or holding any specific investment, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making investment decisions.
     </div>
   </footer>
 
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
-  <script src="/js/calculator.js"></script>
+  <script src="/js/portfolio-backtest.js"></script>
 </body>
 </html>

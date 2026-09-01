@@ -476,6 +476,301 @@ app.get('/api/compare', async (req, res) => {
   }
 });
 
+function addPeriod(ts, freq) {
+  const d = new Date(ts);
+  if (freq === 'annually') d.setUTCFullYear(d.getUTCFullYear() + 1);
+  else d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.getTime();
+}
+
+// Money-weighted annual rate of return via bisection on the cash-flow NPV.
+// Reduces to the standard CAGR formula when there's a single initial flow,
+// but — unlike a naive CAGR — stays meaningful when periodic contributions
+// are mixed into the same backtest (an ordinary CAGR would blend "growth on
+// money that was invested for the full period" with "growth on money added
+// last month" as if they were the same thing).
+function computeXIRR(cashflows) {
+  const t0 = cashflows[0].date;
+  const npv = (rate) =>
+    cashflows.reduce((sum, cf) => sum + cf.amount / Math.pow(1 + rate, (cf.date - t0) / (365.25 * DAY_MS)), 0);
+
+  let lo = -0.9999;
+  let hi = 10;
+  let npvLo = npv(lo);
+  const npvHi = npv(hi);
+  if (npvLo === 0) return lo;
+  if (npvLo * npvHi > 0) return null; // no sign change in range; bisection can't localize a root
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    const npvMid = npv(mid);
+    if (Math.abs(npvMid) < 1e-6) return mid;
+    if ((npvMid > 0) === (npvLo > 0)) {
+      lo = mid;
+      npvLo = npvMid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+app.get('/api/backtest', async (req, res) => {
+  try {
+    const symbolsRaw = String(req.query.symbols || '')
+      .split(',')
+      .map((s) => normalizeSymbol(s))
+      .filter(Boolean);
+    const weightsRaw = String(req.query.weights || '').split(',').map((w) => parseFloat(w));
+    if (symbolsRaw.length === 0) return res.status(400).json({ error: 'Provide at least one symbol.' });
+    if (symbolsRaw.length > 8) return res.status(400).json({ error: 'Maximum 8 symbols at a time.' });
+    if (weightsRaw.length !== symbolsRaw.length || weightsRaw.some((w) => !(w >= 0))) {
+      return res.status(400).json({ error: 'Provide a non-negative weight for every symbol.' });
+    }
+    const weightSum = weightsRaw.reduce((a, b) => a + b, 0);
+    if (Math.abs(weightSum - 100) > 0.5) {
+      return res.status(400).json({ error: `Weights must add up to 100% (currently ${weightSum.toFixed(1)}%).` });
+    }
+    const weights = {};
+    symbolsRaw.forEach((sym, i) => {
+      weights[sym] = weightsRaw[i] / 100;
+    });
+
+    const histories = {};
+    const fetchErrors = {};
+    await Promise.all(
+      symbolsRaw.map(async (sym) => {
+        try {
+          histories[sym] = await fetchHistory(sym);
+        } catch (e) {
+          fetchErrors[sym] = e.message;
+        }
+      })
+    );
+    const validSymbols = symbolsRaw.filter((s) => histories[s]);
+    if (validSymbols.length !== symbolsRaw.length) {
+      return res.status(404).json({ error: 'One or more tickers could not be loaded.', fetchErrors });
+    }
+
+    // Blending multiple tickers into one portfolio value requires a single
+    // common currency, unlike /api/compare where each ticker can stay in
+    // its own native currency side by side.
+    const targetCurrency = ['CAD', 'USD'].includes(req.query.currency) ? req.query.currency : 'CAD';
+    const fxErrors = {};
+    const neededPairs = new Set();
+    for (const sym of validSymbols) {
+      const native = histories[sym].currency;
+      if (native && native !== targetCurrency) neededPairs.add(`${native}${targetCurrency}`);
+    }
+    const fxSeriesByPair = {};
+    await Promise.all(
+      Array.from(neededPairs).map(async (pair) => {
+        try {
+          fxSeriesByPair[pair] = await fetchFXSeries(pair.slice(0, 3), pair.slice(3));
+        } catch (e) {
+          fxErrors[pair] = e.message;
+        }
+      })
+    );
+    for (const sym of validSymbols) {
+      const native = histories[sym].currency;
+      if (native && native !== targetCurrency) {
+        const fx = fxSeriesByPair[`${native}${targetCurrency}`];
+        if (!fx) {
+          return res.status(502).json({ error: `Could not fetch exchange rate to convert ${sym} to ${targetCurrency}.`, fxErrors });
+        }
+        histories[sym] = convertHistoryCurrency(histories[sym], fx);
+      }
+    }
+
+    const now = Date.now();
+    const range = req.query.range || 'max-common';
+    const earliestDates = validSymbols.map((s) => histories[s].series[0].date);
+    const commonStart = Math.max(...earliestDates);
+    let startTs;
+    let endTs = now;
+    if (range === 'custom') {
+      const parseDateParam = (raw) => {
+        if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+        const d = new Date(`${raw}T00:00:00Z`);
+        return Number.isNaN(d.getTime()) ? null : d.getTime();
+      };
+      const customStart = parseDateParam(req.query.start);
+      const customEnd = parseDateParam(req.query.end);
+      if (customStart == null) {
+        return res.status(400).json({ error: 'Custom range requires a valid start date (YYYY-MM-DD).' });
+      }
+      startTs = customStart;
+      endTs = customEnd != null ? Math.min(customEnd + DAY_MS - 1, now) : now;
+      if (startTs >= endTs) {
+        return res.status(400).json({ error: 'Custom start date must be before the end date.' });
+      }
+    } else if (range === 'ytd') {
+      startTs = startOfYear(now);
+    } else if (RANGE_SPECS[range] != null) {
+      startTs = subtractCalendar(now, RANGE_SPECS[range]);
+    } else {
+      startTs = commonStart; // max-common
+    }
+
+    // Every ticker needs to already exist at the start of the backtest --
+    // unlike a single-ticker return calculation, there's no sensible way to
+    // "start" a multi-asset portfolio before all of its holdings exist.
+    if (startTs < commonStart) {
+      return res.status(400).json({
+        error: `These tickers only have data together starting ${new Date(commonStart).toISOString().slice(0, 10)}. Choose a later start date or a shorter range.`,
+        commonStartDate: commonStart,
+      });
+    }
+
+    const initial = Math.max(0, parseFloat(req.query.initial) || 0);
+    const contribution = Math.max(0, parseFloat(req.query.contribution) || 0);
+    const frequency = req.query.frequency === 'annually' ? 'annually' : 'monthly';
+    const rebalance = req.query.rebalance === 'none' ? 'none' : 'annual';
+
+    if (initial <= 0 && contribution <= 0) {
+      return res.status(400).json({ error: 'Enter an initial investment or a contribution amount.' });
+    }
+
+    // Union of every ticker's trading days in range, so a NEO-listed holiday
+    // doesn't quietly drop days where a TSX- or US-listed holding still
+    // traded (each ticker's own price is still resolved with "last known
+    // close" via findOnOrBefore, so a missing day for one holding never
+    // stalls the simulation).
+    const dateSet = new Set();
+    for (const sym of validSymbols) {
+      for (const p of histories[sym].series) {
+        if (p.date >= startTs && p.date <= endTs) dateSet.add(p.date);
+      }
+    }
+    const timeline = Array.from(dateSet).sort((a, b) => a - b);
+    if (timeline.length < 2) {
+      return res.status(404).json({ error: 'Not enough price data in this date range.' });
+    }
+
+    function priceOnOrBefore(sym, ts) {
+      const p = findOnOrBefore(histories[sym].series, ts);
+      return p ? p.close : null;
+    }
+
+    const dividendsByDay = {};
+    for (const sym of validSymbols) {
+      const map = new Map();
+      for (const d of histories[sym].dividends) {
+        const day = Math.floor(d.date / DAY_MS) * DAY_MS;
+        map.set(day, (map.get(day) || 0) + d.amount);
+      }
+      dividendsByDay[sym] = map;
+    }
+
+    function portfolioValueAt(ts) {
+      let v = 0;
+      for (const sym of validSymbols) {
+        const price = priceOnOrBefore(sym, ts);
+        if (price) v += units[sym] * price;
+      }
+      return v;
+    }
+
+    const units = {};
+    const startPrices = {};
+    for (const sym of validSymbols) startPrices[sym] = priceOnOrBefore(sym, timeline[0]);
+    for (const sym of validSymbols) units[sym] = (initial * weights[sym]) / startPrices[sym];
+
+    let totalContributed = initial;
+    let nextContribDate = contribution > 0 ? addPeriod(timeline[0], frequency) : Infinity;
+    let nextRebalanceDate = rebalance === 'annual' ? addPeriod(timeline[0], 'annually') : Infinity;
+    let peakValue = initial;
+    let maxDrawdown = 0;
+    const cashflows = [{ date: timeline[0], amount: -initial }];
+    const dailyCurve = [];
+
+    for (const day of timeline) {
+      const dayFloor = Math.floor(day / DAY_MS) * DAY_MS;
+
+      // Dividends reinvest same-day into the paying ticker (DRIP), not
+      // spread across the portfolio -- matches how the ETF Comparison tool
+      // computes each fund's own "Total Return (DRIP)".
+      for (const sym of validSymbols) {
+        const divPerUnit = dividendsByDay[sym].get(dayFloor);
+        if (divPerUnit) {
+          const price = priceOnOrBefore(sym, day);
+          if (price) units[sym] += (units[sym] * divPerUnit) / price;
+        }
+      }
+
+      while (day >= nextContribDate) {
+        totalContributed += contribution;
+        cashflows.push({ date: nextContribDate, amount: -contribution });
+        for (const sym of validSymbols) {
+          const price = priceOnOrBefore(sym, nextContribDate);
+          if (price) units[sym] += (contribution * weights[sym]) / price;
+        }
+        nextContribDate = addPeriod(nextContribDate, frequency);
+      }
+
+      while (day >= nextRebalanceDate) {
+        const totalValue = portfolioValueAt(nextRebalanceDate);
+        for (const sym of validSymbols) {
+          const price = priceOnOrBefore(sym, nextRebalanceDate);
+          if (price) units[sym] = (totalValue * weights[sym]) / price;
+        }
+        nextRebalanceDate = addPeriod(nextRebalanceDate, 'annually');
+      }
+
+      const value = portfolioValueAt(day);
+      if (value > peakValue) peakValue = value;
+      const drawdown = peakValue > 0 ? (peakValue - value) / peakValue : 0;
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+
+      dailyCurve.push({ date: dayFloor, value, contributed: totalContributed });
+    }
+
+    const finalEntry = dailyCurve[dailyCurve.length - 1];
+    cashflows.push({ date: finalEntry.date, amount: finalEntry.value });
+    const annualizedReturn = computeXIRR(cashflows);
+
+    // Downsample to one point per calendar month for the chart/table --
+    // the simulation itself still runs on real daily bars above, this just
+    // keeps the response size sane over a multi-decade backtest.
+    const monthlyCurve = [];
+    let lastKey = null;
+    for (const point of dailyCurve) {
+      const d = new Date(point.date);
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      if (key !== lastKey) {
+        monthlyCurve.push(point);
+        lastKey = key;
+      } else {
+        monthlyCurve[monthlyCurve.length - 1] = point;
+      }
+    }
+    if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
+
+    res.json({
+      symbols: validSymbols,
+      weights: validSymbols.map((s) => weights[s]),
+      currency: targetCurrency,
+      startDate: timeline[0],
+      endDate: finalEntry.date,
+      commonStartDate: commonStart,
+      initial,
+      contribution,
+      frequency,
+      rebalance,
+      totalContributed,
+      endingValue: finalEntry.value,
+      totalGrowth: finalEntry.value - totalContributed,
+      annualizedReturn,
+      maxDrawdown,
+      curve: monthlyCurve,
+      fetchErrors,
+      fxErrors,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Yahoo's crumb-authenticated endpoints (needed for sector/holdings data)
