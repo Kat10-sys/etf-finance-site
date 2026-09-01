@@ -258,7 +258,17 @@
     updateURL();
     if (state.lastResults) runBacktest();
   });
-  [retireAfterYearsInput, withdrawalRateInput, withdrawalInflationInput, withdrawalFrequencyInput].forEach((el) => {
+  retireAfterYearsInput.addEventListener('change', () => {
+    // Whole years only -- the backend rounds this internally for its
+    // calendar-based scheduling, so round here too rather than let the
+    // field show a fractional value the simulation doesn't actually honor.
+    if (retireAfterYearsInput.value !== '') {
+      retireAfterYearsInput.value = String(Math.max(0, Math.round(Number(retireAfterYearsInput.value) || 0)));
+    }
+    updateURL();
+    if (state.lastResults && retirementToggle.checked) runBacktest();
+  });
+  [withdrawalRateInput, withdrawalInflationInput, withdrawalFrequencyInput].forEach((el) => {
     el.addEventListener('change', () => {
       updateURL();
       if (state.lastResults && retirementToggle.checked) runBacktest();

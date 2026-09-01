@@ -648,7 +648,13 @@ app.get('/api/backtest', async (req, res) => {
     // retireAfterYears (not its value) is what turns the phase on, so
     // "retire immediately" (0) is a valid, meaningful setting.
     const hasRetirement = req.query.retireAfterYears != null && req.query.retireAfterYears !== '';
-    const retireAfterYears = hasRetirement ? Math.max(0, parseFloat(req.query.retireAfterYears) || 0) : null;
+    // Whole years only: retirement timing feeds calendar-based year math
+    // (setUTCFullYear via addYears/addPeriod) the same way the annual
+    // rebalance and inflation-bump schedules do, and silently truncates a
+    // fractional value's decimal part rather than honoring it -- rounding
+    // up front keeps the reported retireAfterYears truthful about what was
+    // actually simulated.
+    const retireAfterYears = hasRetirement ? Math.max(0, Math.round(parseFloat(req.query.retireAfterYears) || 0)) : null;
     const withdrawalRate = Math.max(0, Math.min(100, parseFloat(req.query.withdrawalRate) || 0)) / 100;
     const withdrawalInflation = Math.max(0, Math.min(20, parseFloat(req.query.withdrawalInflation) || 0)) / 100;
     const withdrawalFrequency = req.query.withdrawalFrequency === 'annually' ? 'annually' : 'monthly';
