@@ -717,6 +717,7 @@ function simulateSingleAsset({
   let sortinoRatio = null;
   let bestYear = null;
   let worstYear = null;
+  let annualReturnsByYear = [];
   if (monthlyReturns.length >= 2) {
     const n = monthlyReturns.length;
     const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
@@ -736,7 +737,10 @@ function simulateSingleAsset({
       const year = new Date(monthlyCurve[i].date).getUTCFullYear();
       yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
     }
-    const yearlyReturns = Object.values(yearlyFactors).map((f) => f - 1);
+    annualReturnsByYear = Object.entries(yearlyFactors)
+      .map(([year, f]) => ({ year: Number(year), return: f - 1 }))
+      .sort((a, b) => a.year - b.year);
+    const yearlyReturns = annualReturnsByYear.map((y) => y.return);
     if (yearlyReturns.length) {
       bestYear = Math.max(...yearlyReturns);
       worstYear = Math.min(...yearlyReturns);
@@ -746,6 +750,7 @@ function simulateSingleAsset({
   const endingValueRatio = cpiRatioToToday(finalEntry.date);
   return {
     curve: monthlyCurve.map((p) => ({ date: p.date, value: p.value, valueReal: p.value * cpiRatioToToday(p.date) })),
+    annualReturnsByYear,
     totalContributed,
     totalContributedReal,
     totalWithdrawn,
@@ -1225,6 +1230,7 @@ app.get('/api/backtest', async (req, res) => {
     let sortinoRatio = null;
     let bestYear = null;
     let worstYear = null;
+    let annualReturnsByYear = [];
     if (monthlyReturns.length >= 2) {
       const n = monthlyReturns.length;
       const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
@@ -1244,7 +1250,10 @@ app.get('/api/backtest', async (req, res) => {
         const year = new Date(monthlyCurve[i].date).getUTCFullYear();
         yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
       }
-      const yearlyReturns = Object.values(yearlyFactors).map((f) => f - 1);
+      annualReturnsByYear = Object.entries(yearlyFactors)
+        .map(([year, f]) => ({ year: Number(year), return: f - 1 }))
+        .sort((a, b) => a.year - b.year);
+      const yearlyReturns = annualReturnsByYear.map((y) => y.return);
       if (yearlyReturns.length) {
         bestYear = Math.max(...yearlyReturns);
         worstYear = Math.min(...yearlyReturns);
@@ -1336,6 +1345,7 @@ app.get('/api/backtest', async (req, res) => {
       sortinoRatio,
       bestYear,
       worstYear,
+      annualReturnsByYear,
       curve: monthlyCurve,
       bySymbolSummary,
       cpiAvailable: latestCpi != null,

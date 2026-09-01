@@ -45,6 +45,7 @@
   const currencyButtons = document.querySelectorAll('[data-currency]');
   const dollarModeButtons = document.querySelectorAll('[data-dollar-mode]');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
   const backtestHeadline = document.getElementById('backtestHeadline');
   const backtestStats = document.getElementById('backtestStats');
   const riskStats = document.getElementById('riskStats');
@@ -54,6 +55,7 @@
   const holdingTableBody = document.getElementById('holdingTableBody');
 
   let chart = null;
+  let annualReturnsChart = null;
 
   function chartTheme() {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -316,8 +318,74 @@
     });
   }
 
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', downloadCSV);
+  }
+
+  function downloadCSV() {
+    const data = state.lastResults;
+    if (!data) return;
+    const real = state.dollarMode === 'real';
+    const symbols = data.symbols;
+    const hasBenchmark = data.benchmark && !data.benchmark.error;
+    const benchByDate = hasBenchmark
+      ? new Map(data.benchmark.curve.map((p) => [p.date, real ? p.valueReal : p.value]))
+      : null;
+
+    const lines = [];
+    lines.push('Northbeam Finance - Portfolio Backtest Export');
+    lines.push(`Symbols,${symbols.join(' ')}`);
+    lines.push(`Weights,${data.weights.map((w) => `${(w * 100).toFixed(2)}%`).join(' ')}`);
+    lines.push(`Currency,${data.currency}`);
+    lines.push(`Dollar mode,${real ? "Real (today's dollars)" : 'Nominal'}`);
+    lines.push(`Rebalancing,${data.rebalance}`);
+    lines.push(`Date range,${formatDate(data.startDate)} to ${formatDate(data.endDate)}`);
+    lines.push(`Initial investment,${data.initial}`);
+    lines.push(`Periodic contribution,${data.contribution} (${data.frequency})`);
+    if (data.retirement) {
+      lines.push(`Retirement,after ${data.retirement.retireAfterYears} years, ${(data.retirement.withdrawalRate * 100).toFixed(1)}% withdrawal rate`);
+    }
+    if (hasBenchmark) lines.push(`Benchmark,${data.benchmark.symbol}`);
+    lines.push('');
+
+    const header = ['Date', ...symbols, 'Total Contributed'];
+    if (data.retirement) header.push('Total Withdrawn');
+    header.push('Total Growth', 'Total Value');
+    if (hasBenchmark) header.push(`Benchmark (${data.benchmark.symbol})`);
+    lines.push(header.join(','));
+
+    data.curve.forEach((p) => {
+      const ratio = pointRatio(p, data);
+      const value = p.value * ratio;
+      const contributed = real ? p.contributedReal : p.contributed;
+      const withdrawn = (real ? p.withdrawnReal : p.withdrawn) || 0;
+      const growth = value - contributed + withdrawn;
+      const row = [toISODate(p.date), ...symbols.map((sym) => (p.bySymbol[sym] * ratio).toFixed(2)), contributed.toFixed(2)];
+      if (data.retirement) row.push(withdrawn.toFixed(2));
+      row.push(growth.toFixed(2), value.toFixed(2));
+      if (hasBenchmark) {
+        const benchValue = benchByDate.get(p.date);
+        row.push(benchValue != null ? benchValue.toFixed(2) : '');
+      }
+      lines.push(row.join(','));
+    });
+
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `northbeam-portfolio-backtest-${toISODate(Date.now())}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   window.addEventListener('themechange', () => {
-    if (state.lastResults) renderChart(state.lastResults);
+    if (state.lastResults) {
+      renderChart(state.lastResults);
+      renderAnnualReturnsChart(state.lastResults);
+    }
   });
 
   // ---------- shareable URL ----------
@@ -463,6 +531,7 @@
 
       state.lastResults = data;
       resultsSection.style.display = 'block';
+      if (exportCsvBtn) exportCsvBtn.style.display = 'inline-block';
 
       const problems = [];
       if (data.fetchErrors && Object.keys(data.fetchErrors).length) {
@@ -486,10 +555,58 @@
   function renderResults(data) {
     renderSummary(data);
     renderRiskStats(data);
+    renderAnnualReturnsChart(data);
     renderBenchmark(data);
     renderHoldingTable(data);
     renderChart(data);
     renderTable(data);
+  }
+
+  // Always nominal, matching the risk-adjusted metrics this pairs with
+  // (both are standard-convention, not re-derived per dollar-mode toggle).
+  function renderAnnualReturnsChart(data) {
+    const theme = chartTheme();
+    const years = data.annualReturnsByYear.map((y) => y.year);
+    const portfolioReturns = data.annualReturnsByYear.map((y) => +(y.return * 100).toFixed(2));
+    const hasBenchmark = data.benchmark && !data.benchmark.error && data.benchmark.annualReturnsByYear;
+    const benchByYear = hasBenchmark ? new Map(data.benchmark.annualReturnsByYear.map((y) => [y.year, y.return])) : null;
+
+    const datasets = [
+      {
+        label: 'Portfolio',
+        data: portfolioReturns,
+        backgroundColor: portfolioReturns.map((r) => (r >= 0 ? '#0d9488' : '#dc2626')),
+      },
+    ];
+    if (hasBenchmark) {
+      datasets.push({
+        label: `Benchmark: ${data.benchmark.symbol}`,
+        data: years.map((y) => {
+          const r = benchByYear.get(y);
+          return r != null ? +(r * 100).toFixed(2) : null;
+        }),
+        backgroundColor: '#db2777',
+      });
+    }
+
+    const ctx = document.getElementById('annualReturnsChart').getContext('2d');
+    if (annualReturnsChart) annualReturnsChart.destroy();
+    annualReturnsChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: years, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: hasBenchmark, position: 'bottom', labels: { color: theme.text } },
+          tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed.y >= 0 ? '+' : ''}${item.parsed.y.toFixed(2)}%` } },
+        },
+        scales: {
+          x: { ticks: { color: theme.muted }, grid: { display: false } },
+          y: { ticks: { callback: (v) => `${v}%`, color: theme.muted }, grid: { color: theme.grid } },
+        },
+      },
+    });
   }
 
   function renderBenchmark(data) {
