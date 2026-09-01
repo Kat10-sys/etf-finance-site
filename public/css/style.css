@@ -387,6 +387,18 @@ table.results-table .symbol-inner {
   align-items: center;
   gap: 8px;
 }
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--teal);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+.link-btn:hover { text-decoration: underline; }
+
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }
 .cagr-sub {
@@ -521,6 +533,16 @@ table.results-table .symbol-inner {
 .stat-block .swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
 .stat-label { font-size: 0.78rem; color: var(--text-muted); }
 .stat-value { font-size: 1.1rem; font-weight: 700; color: var(--heading); }
+
+.prefill-note {
+  font-size: 0.82rem;
+  color: var(--teal);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
 
 .disclaimer-note {
   font-size: 0.78rem;

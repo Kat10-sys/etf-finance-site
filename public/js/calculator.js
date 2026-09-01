@@ -387,30 +387,46 @@
       const tr = document.createElement('tr');
       if (!r) {
         tr.innerHTML = `<td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
-          <td colspan="4" style="text-align:left;color:var(--text-muted)">No data returned.</td>`;
+          <td colspan="5" style="text-align:left;color:var(--text-muted)">No data returned.</td>`;
       } else if (r.insufficientData) {
         tr.innerHTML = `<td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
-          <td colspan="4" style="text-align:left;color:var(--text-muted)">Not enough history in this window (data available from ${formatDate(r.earliestAvailable)}).</td>`;
+          <td colspan="5" style="text-align:left;color:var(--text-muted)">Not enough history in this window (data available from ${formatDate(r.earliestAvailable)}).</td>`;
       } else {
+        const cagrPct = r.totalReturnDRIPCAGR != null ? (r.totalReturnDRIPCAGR * 100).toFixed(2) : '';
+        const projectBtn = r.totalReturnDRIPCAGR != null
+          ? `<button class="link-btn" data-symbol="${sym}" data-rate="${cagrPct}">→ Growth Calc</button>`
+          : '—';
         tr.innerHTML = `
           <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</td>
           <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR)}</td>
           <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR)}</td>
           <td>${formatPercentWithCAGR(r.totalReturnDRIP, r.totalReturnDRIPCAGR)}</td>
+          <td>${projectBtn}</td>
         `;
       }
       resultsTableBody.appendChild(tr);
 
       if (r && r.dataGapNote) {
         const noteRow = document.createElement('tr');
-        noteRow.innerHTML = `<td></td><td colspan="4" style="text-align:left;padding-top:0;padding-bottom:14px">
+        noteRow.innerHTML = `<td></td><td colspan="5" style="text-align:left;padding-top:0;padding-bottom:14px">
           <span style="color:#0d9488;font-size:0.8rem">ⓘ ${r.dataGapNote}</span>
         </td>`;
         resultsTableBody.appendChild(noteRow);
       }
     });
   }
+
+  resultsTableBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('.link-btn');
+    if (!btn) return;
+    const params = new URLSearchParams({
+      rate: btn.dataset.rate,
+      source: btn.dataset.symbol,
+      metric: 'Total Return (DRIP)',
+    });
+    window.location.href = `/growth-calculator.html?${params.toString()}`;
+  });
 
   async function renderExposures(results) {
     exposureGrid.innerHTML = '';

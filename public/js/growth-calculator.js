@@ -245,5 +245,30 @@
 
   window.addEventListener('themechange', render);
 
+  // If arriving from the ETF comparison tool's "→ Growth Calc" link, prefill
+  // the return field with that ticker's actual historical CAGR — shown with
+  // a clear note, since piping a specific fund's past return into a
+  // forward-looking projection could otherwise read as an implicit
+  // recommendation rather than the neutral "what would this rate compound
+  // to" illustration it's meant to be.
+  function applyPrefillFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const rate = params.get('rate');
+    const source = params.get('source');
+    const metric = params.get('metric');
+    if (rate == null || Number.isNaN(Number(rate))) return;
+
+    returnInput.value = rate;
+
+    const prefillNote = document.getElementById('prefillNote');
+    if (prefillNote) {
+      const sourceText = source ? ` from ${source}'s` : ' from the';
+      const metricText = metric || 'historical';
+      prefillNote.textContent = `Rate of return set to ${rate}% —${sourceText} actual ${metricText} annualized return (CAGR) from the ETF Comparison tool. Past performance does not predict future returns; this is a hypothetical illustration only.`;
+      prefillNote.style.display = 'block';
+    }
+  }
+
+  applyPrefillFromURL();
   render();
 })();
