@@ -1494,8 +1494,16 @@ app.get('/api/exposure', async (req, res) => {
           countryTotals.set(label, (countryTotals.get(label) || 0) + h.weight);
         })
       );
+      // countryTotals only covers the top 10 holdings' raw AUM weight, which
+      // for a broad fund (e.g. VOO's top 10 is ~38% of the fund) is nowhere
+      // near the whole portfolio. Presenting that raw weight as "United
+      // States: 38%" would badly understate a fund that's actually ~100%
+      // domestic -- rescale to the classified subtotal so the percentages
+      // describe the geographic mix *of the sample*, matching what the pie
+      // chart visually shows (a full circle split among only these labels).
+      const classifiedTotal = Array.from(countryTotals.values()).reduce((sum, w) => sum + w, 0);
       geoWeightings = Array.from(countryTotals.entries())
-        .map(([label, weight]) => ({ label, weight }))
+        .map(([label, weight]) => ({ label, weight: classifiedTotal > 0 ? weight / classifiedTotal : weight }))
         .sort((a, b) => b.weight - a.weight);
     }
 
