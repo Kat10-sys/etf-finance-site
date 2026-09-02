@@ -1471,6 +1471,82 @@ async function quoteSummaryWithRetry(symbol, options, attempts = 5) {
   throw lastErr;
 }
 
+// Yahoo does not expose a direct country/region breakdown for ETFs.
+// Best-effort approximation: for holdings that are individual equities,
+// look up the issuing company's domicile country. Many Canadian
+// asset-allocation ETFs (e.g. XEQT.TO, VFV.TO) instead hold *other* ETFs as
+// their "top holdings" -- those are classified by name/region keywords
+// instead, since they have no company country of their own. That name-based
+// guess fails silently for a leveraged "Enhanced" wrapper fund whose only
+// holding is literally its own unlevered sibling ETF (e.g. HHLE.TO holds
+// nothing but HHL.TO) -- "Harvest Healthcare Leaders Income ETF" doesn't
+// contain any of the keyword's regions, so it fell into "Other /
+// Unclassified" for the fund's entire weight. When the name-based guess
+// comes up empty and the holding looks like a real ticker, resolve one
+// level deeper into *that* fund's own holdings instead of giving up.
+const MAX_GEO_RECURSION_DEPTH = 1;
+async function estimateGeoWeightings(symbol, holdings, depth) {
+  if (holdings.length === 0) return [];
+  const countryTotals = new Map();
+  await Promise.all(
+    holdings.slice(0, 10).map(async (h) => {
+      if (!h.symbol) return;
+      const add = (label, weight) => countryTotals.set(label, (countryTotals.get(label) || 0) + weight);
+
+      const override = exposureOverrides.get(h.symbol);
+      if (override?.geoWeightings) {
+        for (const g of override.geoWeightings) add(g.label, g.weight * h.weight);
+        return;
+      }
+
+      let country = null;
+      try {
+        const profile = await yahooFinance.quoteSummary(h.symbol, { modules: ['summaryProfile'] });
+        country = profile.summaryProfile?.country || null;
+      } catch {
+        // ignore, fall through
+      }
+      if (country) {
+        add(country, h.weight);
+        return;
+      }
+
+      const nameGuess = classifyRegionByName(h.name || h.symbol);
+      const canRecurse = nameGuess === 'Other / Unclassified' && depth < MAX_GEO_RECURSION_DEPTH
+        && isValidTickerFormat(h.symbol) && h.symbol !== symbol;
+      if (canRecurse) {
+        try {
+          const subSummary = await quoteSummaryWithRetry(h.symbol, { modules: ['topHoldings'] });
+          const subHoldings = (subSummary.topHoldings?.holdings || []).map((sh) => ({
+            symbol: sh.symbol,
+            name: sh.holdingName,
+            weight: sh.holdingPercent,
+          }));
+          const subGeo = await estimateGeoWeightings(h.symbol, subHoldings, depth + 1);
+          if (subGeo.length) {
+            for (const g of subGeo) add(g.label, g.weight * h.weight);
+            return;
+          }
+        } catch {
+          // ignore, fall through to the name-based guess below
+        }
+      }
+      add(nameGuess, h.weight);
+    })
+  );
+  // countryTotals only covers the top 10 holdings' raw AUM weight, which
+  // for a broad fund (e.g. VOO's top 10 is ~38% of the fund) is nowhere
+  // near the whole portfolio. Presenting that raw weight as "United
+  // States: 38%" would badly understate a fund that's actually ~100%
+  // domestic -- rescale to the classified subtotal so the percentages
+  // describe the geographic mix *of the sample*, matching what the pie
+  // chart visually shows (a full circle split among only these labels).
+  const classifiedTotal = Array.from(countryTotals.values()).reduce((sum, w) => sum + w, 0);
+  return Array.from(countryTotals.entries())
+    .map(([label, weight]) => ({ label, weight: classifiedTotal > 0 ? weight / classifiedTotal : weight }))
+    .sort((a, b) => b.weight - a.weight);
+}
+
 app.get('/api/exposure', async (req, res) => {
   try {
     const symbol = normalizeSymbol(req.query.symbol);
@@ -1512,44 +1588,11 @@ app.get('/api/exposure', async (req, res) => {
       weight: h.holdingPercent,
     }));
 
-    // Yahoo does not expose a direct country/region breakdown for ETFs.
-    // Best-effort approximation: for holdings that are individual equities,
-    // look up the issuing company's domicile country. Many Canadian
-    // asset-allocation ETFs (e.g. XEQT.TO, VFV.TO) instead hold *other*
-    // ETFs as their "top holdings" — those have no company country, so we
-    // classify them by name/region keywords instead.
     let geoWeightings = [];
     let geoIsEstimate = false;
     if (holdings.length > 0) {
       geoIsEstimate = true;
-      const countryTotals = new Map();
-      await Promise.all(
-        holdings.slice(0, 10).map(async (h) => {
-          if (!h.symbol) return;
-          let label = null;
-          try {
-            const profile = await yahooFinance.quoteSummary(h.symbol, {
-              modules: ['summaryProfile'],
-            });
-            label = profile.summaryProfile?.country || null;
-          } catch {
-            // ignore, fall through to name-based classification
-          }
-          if (!label) label = classifyRegionByName(h.name || h.symbol);
-          countryTotals.set(label, (countryTotals.get(label) || 0) + h.weight);
-        })
-      );
-      // countryTotals only covers the top 10 holdings' raw AUM weight, which
-      // for a broad fund (e.g. VOO's top 10 is ~38% of the fund) is nowhere
-      // near the whole portfolio. Presenting that raw weight as "United
-      // States: 38%" would badly understate a fund that's actually ~100%
-      // domestic -- rescale to the classified subtotal so the percentages
-      // describe the geographic mix *of the sample*, matching what the pie
-      // chart visually shows (a full circle split among only these labels).
-      const classifiedTotal = Array.from(countryTotals.values()).reduce((sum, w) => sum + w, 0);
-      geoWeightings = Array.from(countryTotals.entries())
-        .map(([label, weight]) => ({ label, weight: classifiedTotal > 0 ? weight / classifiedTotal : weight }))
-        .sort((a, b) => b.weight - a.weight);
+      geoWeightings = await estimateGeoWeightings(symbol, holdings, 0);
     }
 
     let geoNote = geoWeightings.length ? 'Geography estimated from top disclosed holdings.' : null;
