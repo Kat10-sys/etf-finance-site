@@ -703,14 +703,24 @@ function simulateSingleAsset({
   }
   if (monthlyCurve[monthlyCurve.length - 1] !== finalEntry) monthlyCurve.push(finalEntry);
 
+  // One entry per month-to-month step, aligned by index with monthlyCurve[i]
+  // (i from 1) -- `null` marks a step that can't yield a meaningful return
+  // (the portfolio was already at $0, e.g. depleted by withdrawals). Keeping
+  // a placeholder instead of skipping the push is what keeps this array in
+  // lockstep with monthlyCurve; skipping used to desync the two arrays and
+  // corrupt every year's return from that point onward.
   const monthlyReturns = [];
   for (let i = 1; i < monthlyCurve.length; i++) {
     const prev = monthlyCurve[i - 1];
     const cur = monthlyCurve[i];
-    if (prev.value <= 0) continue;
+    if (prev.value <= 0) {
+      monthlyReturns.push(null);
+      continue;
+    }
     const netFlow = (cur.contributed - prev.contributed) - (cur.withdrawn - prev.withdrawn);
     monthlyReturns.push((cur.value - netFlow) / prev.value - 1);
   }
+  const validReturns = monthlyReturns.filter((r) => r != null);
 
   let standardDeviation = null;
   let sharpeRatio = null;
@@ -718,14 +728,14 @@ function simulateSingleAsset({
   let bestYear = null;
   let worstYear = null;
   let annualReturnsByYear = [];
-  if (monthlyReturns.length >= 2) {
-    const n = monthlyReturns.length;
-    const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
-    const variance = monthlyReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
+  if (validReturns.length >= 2) {
+    const n = validReturns.length;
+    const mean = validReturns.reduce((a, b) => a + b, 0) / n;
+    const variance = validReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
     standardDeviation = Math.sqrt(variance) * Math.sqrt(12);
 
     const monthlyRiskFree = Math.pow(1 + riskFreeRate, 1 / 12) - 1;
-    const downsideSqSum = monthlyReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
+    const downsideSqSum = validReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
     const downsideDeviation = Math.sqrt(downsideSqSum / n) * Math.sqrt(12);
 
     const annualizedMean = mean * 12;
@@ -734,8 +744,10 @@ function simulateSingleAsset({
 
     const yearlyFactors = {};
     for (let i = 1; i < monthlyCurve.length; i++) {
+      const r = monthlyReturns[i - 1];
+      if (r == null) continue;
       const year = new Date(monthlyCurve[i].date).getUTCFullYear();
-      yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
+      yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + r);
     }
     annualReturnsByYear = Object.entries(yearlyFactors)
       .map(([year, f]) => ({ year: Number(year), return: f - 1 }))
@@ -1216,14 +1228,25 @@ app.get('/api/backtest', async (req, res) => {
     // for the risk metrics below. This is deliberately not the raw
     // value[i]/value[i-1] ratio, which would count a contribution as if it
     // were investment growth.
+    // One entry per month-to-month step, aligned by index with
+    // monthlyCurve[i] (i from 1) -- `null` marks a step that can't yield a
+    // meaningful return (the portfolio was already at $0, e.g. depleted by
+    // withdrawals). Keeping a placeholder instead of skipping the push is
+    // what keeps this array in lockstep with monthlyCurve; skipping used to
+    // desync the two arrays and corrupt every year's return from that point
+    // onward.
     const monthlyReturns = [];
     for (let i = 1; i < monthlyCurve.length; i++) {
       const prev = monthlyCurve[i - 1];
       const cur = monthlyCurve[i];
-      if (prev.value <= 0) continue;
+      if (prev.value <= 0) {
+        monthlyReturns.push(null);
+        continue;
+      }
       const netFlow = (cur.contributed - prev.contributed) - (cur.withdrawn - prev.withdrawn);
       monthlyReturns.push((cur.value - netFlow) / prev.value - 1);
     }
+    const validReturns = monthlyReturns.filter((r) => r != null);
 
     let standardDeviation = null;
     let sharpeRatio = null;
@@ -1231,14 +1254,14 @@ app.get('/api/backtest', async (req, res) => {
     let bestYear = null;
     let worstYear = null;
     let annualReturnsByYear = [];
-    if (monthlyReturns.length >= 2) {
-      const n = monthlyReturns.length;
-      const mean = monthlyReturns.reduce((a, b) => a + b, 0) / n;
-      const variance = monthlyReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
+    if (validReturns.length >= 2) {
+      const n = validReturns.length;
+      const mean = validReturns.reduce((a, b) => a + b, 0) / n;
+      const variance = validReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
       standardDeviation = Math.sqrt(variance) * Math.sqrt(12);
 
       const monthlyRiskFree = Math.pow(1 + riskFreeRate, 1 / 12) - 1;
-      const downsideSqSum = monthlyReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
+      const downsideSqSum = validReturns.reduce((sum, r) => sum + (r < monthlyRiskFree ? (r - monthlyRiskFree) ** 2 : 0), 0);
       const downsideDeviation = Math.sqrt(downsideSqSum / n) * Math.sqrt(12);
 
       const annualizedMean = mean * 12;
@@ -1247,8 +1270,10 @@ app.get('/api/backtest', async (req, res) => {
 
       const yearlyFactors = {};
       for (let i = 1; i < monthlyCurve.length; i++) {
+        const r = monthlyReturns[i - 1];
+        if (r == null) continue;
         const year = new Date(monthlyCurve[i].date).getUTCFullYear();
-        yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + monthlyReturns[i - 1]);
+        yearlyFactors[year] = (yearlyFactors[year] || 1) * (1 + r);
       }
       annualReturnsByYear = Object.entries(yearlyFactors)
         .map(([year, f]) => ({ year: Number(year), return: f - 1 }))
