@@ -829,6 +829,7 @@
   // the last available month of each year, mirroring how the backend itself
   // downsamples the daily simulation to monthly points.
   function toYearlyCurve(curve) {
+    if (curve.length === 0) return curve;
     const yearly = [];
     let lastYear = null;
     for (const point of curve) {
@@ -839,6 +840,14 @@
       } else {
         yearly[yearly.length - 1] = point;
       }
+    }
+    // The loop above keeps overwriting a year's row until it lands on that
+    // year's last month, which silently drops the actual starting point if
+    // the range began partway through its first year (e.g. a portfolio
+    // started in January would otherwise jump straight to that December).
+    // Always keep the true first point visible alongside the year-end rows.
+    if (yearly[0] !== curve[0]) {
+      yearly.unshift(curve[0]);
     }
     return yearly;
   }
@@ -852,7 +861,7 @@
     const tableCadenceNote = document.getElementById('tableCadenceNote');
     if (annualOnly) {
       tableCadenceNote.style.display = 'block';
-      tableCadenceNote.textContent = 'Showing one row per year since contributions, rebalancing, and withdrawals here are all annual (or absent) — the portfolio value still moves daily, but there\'s nothing new to show mid-year.';
+      tableCadenceNote.textContent = 'Showing the starting point plus one row per year since contributions, rebalancing, and withdrawals here are all annual (or absent) — the portfolio value still moves daily, but there\'s nothing new to show mid-year.';
     } else {
       tableCadenceNote.style.display = 'none';
     }
