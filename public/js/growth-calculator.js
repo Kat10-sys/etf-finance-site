@@ -32,6 +32,11 @@
     return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   }
 
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+  }
+
   // Simulates month-by-month: interest accrues every month at the nominal
   // annual rate / 12, contributions land either every month or once a year
   // (December), and — if enabled — the contribution amount itself grows
@@ -265,8 +270,12 @@
 
     const prefillNote = document.getElementById('prefillNote');
     if (prefillNote) {
-      const sourceText = source ? ` from ${source}'s` : ' from the';
-      const metricText = metric || 'historical';
+      // source/metric arrive via URL query params (from the ETF Comparison
+      // tool's "→ Growth Calc" link) and, unlike `rate`, aren't constrained
+      // to a safe format -- escape before this goes into innerHTML so a
+      // crafted link can't inject markup here.
+      const sourceText = source ? ` from ${escapeHtml(source)}'s` : ' from the';
+      const metricText = escapeHtml(metric || 'historical');
       const cagrBtn = window.termInfoBtn ? window.termInfoBtn('cagr', 'CAGR') : '';
       prefillNote.innerHTML = `Rate of return set to ${rate}% —${sourceText} actual ${metricText} annualized return (CAGR${cagrBtn}) from the ETF Comparison tool. Past performance does not predict future returns; this is a hypothetical illustration only.`;
       prefillNote.style.display = 'block';
