@@ -111,7 +111,7 @@
       <div class="hint" id="retirementHint" style="display:none">The withdrawal amount is set once, as a percentage of the portfolio's value at retirement, then grows with inflation every year after — it does not recalculate against the current balance.</div>
 
       <div class="currency-row">
-        <span class="currency-label">Rebalancing:</span>
+        <span class="currency-label">Rebalancing<button class="term-info-btn" data-term="rebalancing" aria-label="What does rebalancing mean?" aria-expanded="false" type="button">i</button>:</span>
         <select id="rebalanceInput">
           <option value="none">No rebalancing (buy &amp; hold)</option>
           <option value="monthly">Monthly</option>
@@ -122,13 +122,13 @@
       </div>
 
       <div class="currency-row">
-        <span class="currency-label">Risk-free rate (for Sharpe/Sortino):</span>
+        <span class="currency-label">Risk-free rate<button class="term-info-btn" data-term="risk-free-rate" aria-label="What does risk-free rate mean?" aria-expanded="false" type="button">i</button> (for Sharpe<button class="term-info-btn" data-term="sharpe-ratio" aria-label="What does Sharpe ratio mean?" aria-expanded="false" type="button">i</button>/Sortino<button class="term-info-btn" data-term="sortino-ratio" aria-label="What does Sortino ratio mean?" aria-expanded="false" type="button">i</button>):</span>
         <input type="number" id="riskFreeRateInput" value="0" min="0" max="20" step="0.1" inputmode="decimal" style="width:80px">
         <span class="currency-label">%</span>
       </div>
 
       <div class="currency-row">
-        <span class="currency-label">Benchmark (optional):</span>
+        <span class="currency-label">Benchmark<button class="term-info-btn" data-term="benchmark" aria-label="What does benchmark mean?" aria-expanded="false" type="button">i</button> (optional):</span>
         <input type="text" id="benchmarkInput" placeholder="e.g. SPY, VFV.TO" autocomplete="off" style="width:140px">
       </div>
       <div class="hint">Simulated with the same initial investment, contributions, and retirement withdrawals as your portfolio above, for a like-for-like comparison.</div>
@@ -148,7 +148,7 @@
           <button class="currency-btn" data-dollar-mode="real">Real (today's dollars)</button>
         </div>
       </div>
-      <div class="hint">"Real" restates every figure in today's purchasing power using actual historical CPI (US or Canada, matching the currency above) — not a projection or assumed rate.</div>
+      <div class="hint">"Real" restates every figure in today's purchasing power<button class="term-info-btn" data-term="today-dollars" aria-label="What does today's dollars mean?" aria-expanded="false" type="button">i</button> using actual historical CPI<button class="term-info-btn" data-term="cpi" aria-label="What does CPI mean?" aria-expanded="false" type="button">i</button> (US or Canada, matching the currency above) — not a projection or assumed rate.</div>
 
       <div class="action-row">
         <button class="btn" id="runBtn" disabled>Run Backtest</button>
@@ -212,6 +212,7 @@
 
       <div class="panel chart-card">
         <div class="chart-wrap"><canvas id="backtestChart"></canvas></div>
+        <div class="hint" style="margin-top:10px">The dashed line is your Net Invested<button class="term-info-btn" data-term="net-invested" aria-label="What does Net Invested mean?" aria-expanded="false" type="button">i</button> — the gap between it and the top of the bars is your investment growth.</div>
       </div>
 
       <div class="panel">
@@ -241,6 +242,7 @@
 
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
+  <script src="/js/term-info.js"></script>
   <script src="/js/portfolio-backtest.js"></script>
 </body>
 </html>

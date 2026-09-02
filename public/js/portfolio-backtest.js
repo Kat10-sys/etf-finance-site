@@ -621,13 +621,14 @@
       return;
     }
     const real = state.dollarMode === 'real';
+    const tb = (term, label) => (window.termInfoBtn ? window.termInfoBtn(term, label) : '');
     const rows = [
       ['Ending value', formatMoney(real ? data.endingValueReal : data.endingValue), formatMoney(real ? b.endingValueReal : b.endingValue)],
       ['Investment growth', formatMoney(real ? data.totalGrowthReal : data.totalGrowth), formatMoney(real ? b.totalGrowthReal : b.totalGrowth)],
-      ['Annualized return (XIRR)', pctOrNA(real ? data.annualizedReturnReal : data.annualizedReturn), pctOrNA(real ? b.annualizedReturnReal : b.annualizedReturn)],
-      ['Standard deviation', pctOrNA(data.standardDeviation), pctOrNA(b.standardDeviation)],
-      ['Sharpe ratio', ratioOrNA(data.sharpeRatio), ratioOrNA(b.sharpeRatio)],
-      ['Max drawdown', pctOrNA(real ? data.maxDrawdownReal : data.maxDrawdown), pctOrNA(real ? b.maxDrawdownReal : b.maxDrawdown)],
+      [`Annualized return (XIRR${tb('xirr', 'XIRR')})`, pctOrNA(real ? data.annualizedReturnReal : data.annualizedReturn), pctOrNA(real ? b.annualizedReturnReal : b.annualizedReturn)],
+      [`Standard deviation${tb('standard-deviation', 'standard deviation')}`, pctOrNA(data.standardDeviation), pctOrNA(b.standardDeviation)],
+      [`Sharpe ratio${tb('sharpe-ratio', 'Sharpe ratio')}`, ratioOrNA(data.sharpeRatio), ratioOrNA(b.sharpeRatio)],
+      [`Max drawdown${tb('max-drawdown', 'max drawdown')}`, pctOrNA(real ? data.maxDrawdownReal : data.maxDrawdown), pctOrNA(real ? b.maxDrawdownReal : b.maxDrawdown)],
     ];
     benchmarkTableBody.innerHTML = rows.map(([label, port, bench]) => `
       <tr><td>${label}</td><td>${port}</td><td>${bench}</td></tr>
@@ -653,10 +654,11 @@
     }
     const pct = (v) => (v != null ? `${(v * 100).toFixed(2)}%` : 'n/a');
     const ratio = (v) => (v != null ? v.toFixed(2) : 'n/a');
+    const tb = (term, label) => (window.termInfoBtn ? window.termInfoBtn(term, label) : '');
     const stats = [
-      { color: '#dc2626', label: 'Standard deviation (annualized)', value: pct(data.standardDeviation) },
-      { color: '#7c3aed', label: 'Sharpe ratio', value: ratio(data.sharpeRatio) },
-      { color: '#2563eb', label: 'Sortino ratio', value: ratio(data.sortinoRatio) },
+      { color: '#dc2626', label: `Standard deviation (annualized)${tb('standard-deviation', 'standard deviation')}`, value: pct(data.standardDeviation) },
+      { color: '#7c3aed', label: `Sharpe ratio${tb('sharpe-ratio', 'Sharpe ratio')}`, value: ratio(data.sharpeRatio) },
+      { color: '#2563eb', label: `Sortino ratio${tb('sortino-ratio', 'Sortino ratio')}`, value: ratio(data.sortinoRatio) },
       { color: '#059669', label: 'Best year', value: pct(data.bestYear) },
       { color: '#d97706', label: 'Worst year', value: pct(data.worstYear) },
     ];
@@ -703,9 +705,10 @@
     if (retirement) {
       stats.push({ color: '#d97706', label: 'Total withdrawn', value: formatMoney(totalWithdrawn) });
     }
+    const tb = (term, label) => (window.termInfoBtn ? window.termInfoBtn(term, label) : '');
     stats.push({ color: '#2563eb', label: 'Investment growth', value: formatMoney(totalGrowth) });
-    stats.push({ color: '#7c3aed', label: 'Annualized return (XIRR)', value: xirrText });
-    stats.push({ color: '#dc2626', label: 'Max drawdown', value: ddText });
+    stats.push({ color: '#7c3aed', label: `Annualized return (XIRR${tb('xirr', 'XIRR')})`, value: xirrText });
+    stats.push({ color: '#dc2626', label: `Max drawdown${tb('max-drawdown', 'max drawdown')}`, value: ddText });
     if (retirement) {
       stats.push(retirement.depletedDate
         ? { color: '#dc2626', label: 'Depleted on', value: formatDate(retirement.depletedDate) }

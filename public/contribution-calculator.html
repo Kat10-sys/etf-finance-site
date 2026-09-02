@@ -37,7 +37,7 @@
       <strong>This is an estimate, not your official contribution room.</strong> The CRA is the only authoritative source — sign in to <a href="https://www.canada.ca/en/revenue-agency/services/e-services/cra-login-services.html" target="_blank" rel="noopener">CRA My Account</a> or check your latest Notice of Assessment before contributing. Over-contributing to a TFSA or RRSP can trigger a 1%-per-month penalty tax on the excess amount. This tool does not know about non-residency years, forgotten contributions/withdrawals, or pension adjustments you haven't entered — it can only be as accurate as what you tell it. Not tax or financial advice.
     </div>
 
-    <h2 class="section-title">TFSA Contribution Room</h2>
+    <h2 class="section-title">TFSA<button class="term-info-btn" data-term="tfsa" aria-label="What does TFSA stand for?" aria-expanded="false" type="button">i</button> Contribution Room<button class="term-info-btn" data-term="contribution-room" aria-label="What does contribution room mean?" aria-expanded="false" type="button">i</button></h2>
     <p class="section-sub">Based on the CRA's published annual dollar limits since 2009.</p>
 
     <div class="panel">
@@ -66,7 +66,7 @@
       <div class="warning-note" id="tfsaExcessWarning" style="display:none"></div>
     </div>
 
-    <h2 class="section-title">RRSP Contribution Room</h2>
+    <h2 class="section-title">RRSP<button class="term-info-btn" data-term="rrsp" aria-label="What does RRSP stand for?" aria-expanded="false" type="button">i</button> Contribution Room</h2>
     <p class="section-sub">New room is 18% of last year's earned income, up to the year's dollar maximum, plus whatever you're carrying forward.</p>
 
     <div class="panel">
@@ -76,7 +76,7 @@
           <input type="number" id="rrspIncomeInput" value="60000" min="0" step="500" inputmode="decimal">
         </label>
         <label class="form-field">
-          <span>Unused RRSP room (from your Notice of Assessment)</span>
+          <span>Unused RRSP room, carried forward<button class="term-info-btn" data-term="carryforward" aria-label="What does carried forward mean?" aria-expanded="false" type="button">i</button> (from your Notice of Assessment)</span>
           <input type="number" id="rrspCarryforwardInput" value="0" min="0" step="100" inputmode="decimal">
         </label>
         <label class="form-field">
@@ -109,6 +109,7 @@
 
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
+  <script src="/js/term-info.js"></script>
   <script src="/js/contribution-calculator.js"></script>
 </body>
 </html>

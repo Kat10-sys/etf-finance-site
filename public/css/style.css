@@ -649,6 +649,51 @@ table.results-table .symbol-inner {
 .stat-label { font-size: 0.78rem; color: var(--text-muted); }
 .stat-value { font-size: 1.1rem; font-weight: 700; color: var(--heading); }
 
+/* ---------- Term glossary info buttons ---------- */
+.term-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--text-muted);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  margin-left: 5px;
+  padding: 0;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.term-info-btn:hover, .term-info-btn:focus-visible, .term-info-btn[aria-expanded="true"] {
+  border-color: var(--teal);
+  color: var(--teal);
+  outline: none;
+}
+.term-popover {
+  position: absolute;
+  z-index: 80;
+  width: max-content;
+  max-width: 280px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text);
+  font-weight: 400;
+  font-style: normal;
+  text-align: left;
+}
+
 .prefill-note {
   font-size: 0.82rem;
   color: var(--teal);

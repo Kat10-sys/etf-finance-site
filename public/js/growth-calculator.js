@@ -267,7 +267,8 @@
     if (prefillNote) {
       const sourceText = source ? ` from ${source}'s` : ' from the';
       const metricText = metric || 'historical';
-      prefillNote.textContent = `Rate of return set to ${rate}% —${sourceText} actual ${metricText} annualized return (CAGR) from the ETF Comparison tool. Past performance does not predict future returns; this is a hypothetical illustration only.`;
+      const cagrBtn = window.termInfoBtn ? window.termInfoBtn('cagr', 'CAGR') : '';
+      prefillNote.innerHTML = `Rate of return set to ${rate}% —${sourceText} actual ${metricText} annualized return (CAGR${cagrBtn}) from the ETF Comparison tool. Past performance does not predict future returns; this is a hypothetical illustration only.`;
       prefillNote.style.display = 'block';
     }
   }

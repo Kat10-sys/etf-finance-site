@@ -149,7 +149,7 @@
       </div>
       <div class="stat-block">
         <span class="swatch" style="background:#2563eb"></span>
-        <div><div class="stat-label">Carried forward, unused</div><div class="stat-value">${formatMoney(carryforward)}</div></div>
+        <div><div class="stat-label">Carried forward, unused${window.termInfoBtn ? window.termInfoBtn('carryforward', 'carried forward') : ''}</div><div class="stat-value">${formatMoney(carryforward)}</div></div>
       </div>
       <div class="stat-block">
         <span class="swatch" style="background:#d97706"></span>
@@ -169,7 +169,8 @@
       // rrsps-related-plans/contributing-a-rrsp-prpp/what-happens-you-over-
       // your-rrsp-prpp-deduction-limit.html ("Excess Contributions"),
       // verified directly against the live page.
-      rrspExcessWarning.innerHTML = `<strong>Over-contribution penalty:</strong> The CRA allows a $2,000 lifetime buffer over your RRSP deduction limit (if you were 18 or older at any point this year) before any penalty applies. Beyond that buffer, the CRA imposes a tax of 1% per month on the excess amount, accumulating until you withdraw the excess or gain enough new deduction limit in a later year to absorb it. You'd generally need to file Form T1-OVP within 90 days of the year's end.`;
+      const deductionLimitBtn = window.termInfoBtn ? window.termInfoBtn('deduction-limit', 'RRSP deduction limit') : '';
+      rrspExcessWarning.innerHTML = `<strong>Over-contribution penalty:</strong> The CRA allows a $2,000 lifetime buffer over your RRSP deduction limit${deductionLimitBtn} (if you were 18 or older at any point this year) before any penalty applies. Beyond that buffer, the CRA imposes a tax of 1% per month on the excess amount, accumulating until you withdraw the excess or gain enough new deduction limit in a later year to absorb it. You'd generally need to file Form T1-OVP within 90 days of the year's end.`;
     } else if (isBuffered) {
       rrspExcessWarning.style.display = 'none';
       rrspBufferNote.style.display = 'block';
@@ -182,7 +183,7 @@
 
   document.getElementById('rrspIncomeLabel').textContent = `Earned income, ${currentYear - 1}`;
   document.getElementById('rrspContributedLabel').textContent = `RRSP contributions made, ${currentYear}`;
-  document.getElementById('rrspPensionLabel').textContent = `Pension adjustment, ${currentYear - 1} (if any)`;
+  document.getElementById('rrspPensionLabel').innerHTML = `Pension adjustment, ${currentYear - 1} (if any)${window.termInfoBtn ? window.termInfoBtn('pension-adjustment', 'pension adjustment') : ''}`;
 
   [rrspIncomeInput, rrspCarryforwardInput, rrspPensionInput, rrspContributedInput].forEach((el) => {
     el.addEventListener('input', renderRRSP);

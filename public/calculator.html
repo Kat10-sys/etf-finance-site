@@ -96,19 +96,20 @@
               <tr>
                 <th>Ticker</th>
                 <th>Period</th>
-                <th>Price Return</th>
-                <th>Dividend + Cash</th>
-                <th>Total Return (DRIP)</th>
+                <th>Price Return<button class="term-info-btn" data-term="price-return" aria-label="What does Price Return mean?" aria-expanded="false" type="button">i</button></th>
+                <th>Dividend + Cash<button class="term-info-btn" data-term="dividend-cash" aria-label="What does Dividend + Cash mean?" aria-expanded="false" type="button">i</button></th>
+                <th>Total Return (DRIP)<button class="term-info-btn" data-term="total-return-drip" aria-label="What does Total Return (DRIP) mean?" aria-expanded="false" type="button">i</button></th>
                 <th>Project</th>
               </tr>
             </thead>
             <tbody id="resultsTableBody"></tbody>
           </table>
         </div>
+        <div class="hint" style="margin-top:10px">Each figure's smaller sub-value is its CAGR<button class="term-info-btn" data-term="cagr" aria-label="What does CAGR mean?" aria-expanded="false" type="button">i</button> — the annualized version of that same return.</div>
       </div>
 
       <h2 class="section-title">Sector &amp; Geographic Exposure</h2>
-      <p class="section-sub">Based on each fund's most recently disclosed holdings.</p>
+      <p class="section-sub">Based on each fund's most recently disclosed holdings. Each card also shows the fund's expense ratio<button class="term-info-btn" data-term="expense-ratio" aria-label="What does expense ratio mean?" aria-expanded="false" type="button">i</button>.</p>
       <div class="exposure-grid" id="exposureGrid"></div>
     </div>
   </div>
@@ -121,6 +122,7 @@
 
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
+  <script src="/js/term-info.js"></script>
   <script src="/js/calculator.js"></script>
 </body>
 </html>
