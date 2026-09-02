@@ -810,9 +810,50 @@
     });
   }
 
+  // True when contributions, rebalancing, and (if retirement is on)
+  // withdrawals all happen at most once a year -- in that case every monthly
+  // row in between two annual events shows the same contributed/withdrawn
+  // totals with only the market-driven value drifting, which is mostly
+  // noise for a table meant to be read at a glance.
+  function isAnnualCadenceOnly(data) {
+    const contributionOk = data.contribution <= 0 || data.frequency === 'annually';
+    const rebalanceOk = data.rebalance === 'annually' || data.rebalance === 'none';
+    const withdrawalOk = !data.retirement || data.retirement.withdrawalFrequency === 'annually';
+    return contributionOk && rebalanceOk && withdrawalOk;
+  }
+
+  // Collapses the (already monthly) curve to one point per calendar year --
+  // the last available month of each year, mirroring how the backend itself
+  // downsamples the daily simulation to monthly points.
+  function toYearlyCurve(curve) {
+    const yearly = [];
+    let lastYear = null;
+    for (const point of curve) {
+      const year = new Date(point.date).getUTCFullYear();
+      if (year !== lastYear) {
+        yearly.push(point);
+        lastYear = year;
+      } else {
+        yearly[yearly.length - 1] = point;
+      }
+    }
+    return yearly;
+  }
+
   function renderTable(data) {
-    const { curve, symbols, retirement } = data;
+    const { symbols, retirement } = data;
     const real = state.dollarMode === 'real';
+    const annualOnly = isAnnualCadenceOnly(data);
+    const curve = annualOnly ? toYearlyCurve(data.curve) : data.curve;
+
+    const tableCadenceNote = document.getElementById('tableCadenceNote');
+    if (annualOnly) {
+      tableCadenceNote.style.display = 'block';
+      tableCadenceNote.textContent = 'Showing one row per year since contributions, rebalancing, and withdrawals here are all annual (or absent) — the portfolio value still moves daily, but there\'s nothing new to show mid-year.';
+    } else {
+      tableCadenceNote.style.display = 'none';
+    }
+
     backtestTableHead.innerHTML = `
       <tr>
         <th>Date</th>
