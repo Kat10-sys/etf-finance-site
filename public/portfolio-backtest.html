@@ -87,16 +87,24 @@
         <span>Simulate a retirement/withdrawal phase</span>
       </label>
 
+      <div class="currency-row" id="withdrawalModeRow" style="display:none">
+        <span class="currency-label">Withdrawal strategy:</span>
+        <div class="currency-buttons">
+          <button class="currency-btn active" data-withdrawal-mode="fixed">Fixed, % of balance at retirement</button>
+          <button class="currency-btn" data-withdrawal-mode="dynamic">Dynamic, % of current value</button>
+        </div>
+      </div>
+
       <div class="form-grid" id="retirementFields" style="display:none">
         <label class="form-field">
           <span>Years until retirement</span>
           <input type="number" id="retireAfterYearsInput" value="10" min="0" max="80" step="1" inputmode="numeric">
         </label>
         <label class="form-field">
-          <span>Withdrawal rate (% of balance at retirement, per year)</span>
+          <span id="withdrawalRateLabel">Withdrawal rate (% of balance at retirement, per year)</span>
           <input type="number" id="withdrawalRateInput" value="4" min="0.1" max="100" step="0.1" inputmode="decimal">
         </label>
-        <label class="form-field">
+        <label class="form-field" id="withdrawalInflationField">
           <span>Inflation rate for withdrawals</span>
           <input type="number" id="withdrawalInflationInput" value="2" min="0" max="20" step="0.1" inputmode="decimal">
         </label>

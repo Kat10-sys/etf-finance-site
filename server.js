@@ -585,6 +585,7 @@ function simulateSingleAsset({
   withdrawalRate,
   withdrawalInflation,
   withdrawalFrequency,
+  withdrawalMode,
   cpiRatioToToday,
   riskFreeRate,
 }) {
@@ -653,14 +654,22 @@ function simulateSingleAsset({
         annualWithdrawalInitial = retirementValue * withdrawalRate;
         currentAnnualWithdrawal = annualWithdrawalInitial;
       }
-      while (nextInflationBumpDate <= nextWithdrawalDate) {
-        currentAnnualWithdrawal *= 1 + withdrawalInflation;
-        nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
-      }
       const periodsPerYear = withdrawalFrequency === 'annually' ? 1 : 12;
-      const installment = currentAnnualWithdrawal / periodsPerYear;
       const price = priceOnOrBefore(nextWithdrawalDate);
       const valueNow = price ? units * price : 0;
+      let installment;
+      if (withdrawalMode === 'dynamic') {
+        // Recalculated every period against the current balance -- rises
+        // and falls with the portfolio instead of following a fixed,
+        // inflation-adjusted schedule set once at retirement.
+        installment = (valueNow * withdrawalRate) / periodsPerYear;
+      } else {
+        while (nextInflationBumpDate <= nextWithdrawalDate) {
+          currentAnnualWithdrawal *= 1 + withdrawalInflation;
+          nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
+        }
+        installment = currentAnnualWithdrawal / periodsPerYear;
+      }
       const actualWithdrawal = Math.min(installment, valueNow);
       if (price && actualWithdrawal > 0) units -= actualWithdrawal / price;
 
@@ -668,7 +677,11 @@ function simulateSingleAsset({
       totalWithdrawnReal += actualWithdrawal * cpiRatioToToday(nextWithdrawalDate);
       cashflows.push({ date: nextWithdrawalDate, amount: actualWithdrawal });
 
-      if (actualWithdrawal < installment - 1e-6) {
+      // A dynamic withdrawal is always <= the current balance by
+      // construction (it's a percentage of it), so it can only ever
+      // asymptotically approach zero, never actually deplete the account --
+      // the depletion check below is meaningless for that mode.
+      if (withdrawalMode !== 'dynamic' && actualWithdrawal < installment - 1e-6) {
         depletedDate = nextWithdrawalDate;
         units = 0;
         nextWithdrawalDate = Infinity;
@@ -800,6 +813,7 @@ function simulateSingleAsset({
           retirementValue,
           retirementValueReal: retirementValue != null ? retirementValue * cpiRatioToToday(retirementDate) : null,
           annualWithdrawalInitial,
+          withdrawalMode,
           depletedDate,
         }
       : null,
@@ -980,6 +994,7 @@ app.get('/api/backtest', async (req, res) => {
     const withdrawalRate = Math.max(0, Math.min(100, parseFloat(req.query.withdrawalRate) || 0)) / 100;
     const withdrawalInflation = Math.max(0, Math.min(20, parseFloat(req.query.withdrawalInflation) || 0)) / 100;
     const withdrawalFrequency = req.query.withdrawalFrequency === 'annually' ? 'annually' : 'monthly';
+    const withdrawalMode = req.query.withdrawalMode === 'dynamic' ? 'dynamic' : 'fixed';
 
     if (hasRetirement && withdrawalRate <= 0) {
       return res.status(400).json({ error: 'Enter a withdrawal rate greater than 0% for the retirement phase.' });
@@ -1153,15 +1168,23 @@ app.get('/api/backtest', async (req, res) => {
           annualWithdrawalInitial = retirementValue * withdrawalRate;
           currentAnnualWithdrawal = annualWithdrawalInitial;
         }
-        while (nextInflationBumpDate <= nextWithdrawalDate) {
-          currentAnnualWithdrawal *= 1 + withdrawalInflation;
-          nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
-        }
 
         const periodsPerYear = withdrawalFrequency === 'annually' ? 1 : 12;
-        const installment = currentAnnualWithdrawal / periodsPerYear;
         const bySymbolNow = valuesBySymbolAt(nextWithdrawalDate);
         const totalValueNow = validSymbols.reduce((sum, sym) => sum + bySymbolNow[sym], 0);
+        let installment;
+        if (withdrawalMode === 'dynamic') {
+          // Recalculated every period against the current balance -- rises
+          // and falls with the portfolio instead of following a fixed,
+          // inflation-adjusted schedule set once at retirement.
+          installment = (totalValueNow * withdrawalRate) / periodsPerYear;
+        } else {
+          while (nextInflationBumpDate <= nextWithdrawalDate) {
+            currentAnnualWithdrawal *= 1 + withdrawalInflation;
+            nextInflationBumpDate = addPeriod(nextInflationBumpDate, 'annually');
+          }
+          installment = currentAnnualWithdrawal / periodsPerYear;
+        }
         const actualWithdrawal = Math.min(installment, totalValueNow);
 
         if (totalValueNow > 0 && actualWithdrawal > 0) {
@@ -1180,7 +1203,11 @@ app.get('/api/backtest', async (req, res) => {
         totalWithdrawnReal += actualWithdrawal * cpiRatioToToday(nextWithdrawalDate);
         cashflows.push({ date: nextWithdrawalDate, amount: actualWithdrawal });
 
-        if (actualWithdrawal < installment - 1e-6) {
+        // A dynamic withdrawal is always <= the current balance by
+        // construction (it's a percentage of it), so it can only ever
+        // asymptotically approach zero, never actually deplete the account
+        // -- the depletion check below is meaningless for that mode.
+        if (withdrawalMode !== 'dynamic' && actualWithdrawal < installment - 1e-6) {
           // Ran out of money -- stop the account at zero rather than
           // continuing to "withdraw" from an empty portfolio.
           depletedDate = nextWithdrawalDate;
@@ -1333,6 +1360,7 @@ app.get('/api/backtest', async (req, res) => {
           withdrawalRate,
           withdrawalInflation,
           withdrawalFrequency,
+          withdrawalMode,
           cpiRatioToToday,
           riskFreeRate,
         });
@@ -1401,6 +1429,7 @@ app.get('/api/backtest', async (req, res) => {
             withdrawalRate,
             withdrawalInflation,
             withdrawalFrequency,
+            withdrawalMode,
             depletedDate,
           }
         : null,

@@ -7,6 +7,7 @@
     currency: 'CAD',
     rebalance: 'annually',
     dollarMode: 'nominal', // 'nominal' | 'real' -- display-only, no refetch needed
+    withdrawalMode: 'fixed', // 'fixed' | 'dynamic'
     customStart: '',
     customEnd: '',
     lastResults: null,
@@ -33,6 +34,10 @@
   const retirementToggle = document.getElementById('retirementToggle');
   const retirementFields = document.getElementById('retirementFields');
   const retirementHint = document.getElementById('retirementHint');
+  const withdrawalModeRow = document.getElementById('withdrawalModeRow');
+  const withdrawalModeButtons = document.querySelectorAll('[data-withdrawal-mode]');
+  const withdrawalRateLabel = document.getElementById('withdrawalRateLabel');
+  const withdrawalInflationField = document.getElementById('withdrawalInflationField');
   const retireAfterYearsInput = document.getElementById('retireAfterYearsInput');
   const withdrawalRateInput = document.getElementById('withdrawalRateInput');
   const withdrawalInflationInput = document.getElementById('withdrawalInflationInput');
@@ -290,7 +295,34 @@
   function setRetirementFieldsVisible(visible) {
     retirementFields.style.display = visible ? 'grid' : 'none';
     retirementHint.style.display = visible ? 'block' : 'none';
+    withdrawalModeRow.style.display = visible ? 'flex' : 'none';
   }
+
+  // Keeps the rate-field label, the inflation field's visibility, and the
+  // explanatory hint in sync with the selected strategy -- "dynamic"
+  // recalculates against the current balance every period and has no use
+  // for an inflation assumption, unlike "fixed".
+  function updateWithdrawalModeUI() {
+    const dynamic = state.withdrawalMode === 'dynamic';
+    withdrawalRateLabel.textContent = dynamic
+      ? 'Withdrawal rate (% of current balance, each period)'
+      : 'Withdrawal rate (% of balance at retirement, per year)';
+    withdrawalInflationField.style.display = dynamic ? 'none' : '';
+    retirementHint.textContent = dynamic
+      ? "The withdrawal amount recalculates every period as a percentage of the portfolio's current value — it naturally rises and falls with the portfolio instead of following a fixed, inflation-adjusted schedule."
+      : "The withdrawal amount is set once, as a percentage of the portfolio's value at retirement, then grows with inflation every year after — it does not recalculate against the current balance.";
+  }
+
+  withdrawalModeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      withdrawalModeButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.withdrawalMode = btn.dataset.withdrawalMode;
+      updateWithdrawalModeUI();
+      updateURL();
+      if (state.lastResults && retirementToggle.checked) runBacktest();
+    });
+  });
 
   retirementToggle.addEventListener('change', () => {
     setRetirementFieldsVisible(retirementToggle.checked);
@@ -353,7 +385,8 @@
     lines.push(`Initial investment,${data.initial}`);
     lines.push(`Periodic contribution,${data.contribution} (${data.frequency})`);
     if (data.retirement) {
-      lines.push(`Retirement,after ${data.retirement.retireAfterYears} years, ${(data.retirement.withdrawalRate * 100).toFixed(1)}% withdrawal rate`);
+      const modeText = data.retirement.withdrawalMode === 'dynamic' ? 'dynamic, % of current balance' : 'fixed, % of balance at retirement';
+      lines.push(`Retirement,after ${data.retirement.retireAfterYears} years, ${(data.retirement.withdrawalRate * 100).toFixed(1)}% withdrawal rate (${modeText})`);
     }
     if (hasBenchmark) lines.push(`Benchmark,${data.benchmark.symbol}`);
     lines.push('');
@@ -421,7 +454,8 @@
     if (retirementToggle.checked) {
       params.set('retireAfterYears', retireAfterYearsInput.value || '0');
       params.set('withdrawalRate', withdrawalRateInput.value || '0');
-      params.set('withdrawalInflation', withdrawalInflationInput.value || '0');
+      params.set('withdrawalMode', state.withdrawalMode);
+      if (state.withdrawalMode !== 'dynamic') params.set('withdrawalInflation', withdrawalInflationInput.value || '0');
       params.set('withdrawalFrequency', withdrawalFrequencyInput.value);
     }
     const qs = params.toString();
@@ -485,7 +519,13 @@
       if (params.get('withdrawalInflation') != null) withdrawalInflationInput.value = params.get('withdrawalInflation');
       const withdrawalFrequency = params.get('withdrawalFrequency');
       if (withdrawalFrequency === 'monthly' || withdrawalFrequency === 'annually') withdrawalFrequencyInput.value = withdrawalFrequency;
+      const withdrawalMode = params.get('withdrawalMode');
+      if (withdrawalMode === 'dynamic' || withdrawalMode === 'fixed') {
+        state.withdrawalMode = withdrawalMode;
+        withdrawalModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.withdrawalMode === withdrawalMode));
+      }
     }
+    updateWithdrawalModeUI();
 
     renderWeightList();
     if (state.entries.length) runBacktest();
@@ -537,6 +577,7 @@
         params.set('withdrawalRate', String(Math.max(0, Number(withdrawalRateInput.value) || 0)));
         params.set('withdrawalInflation', String(Math.max(0, Number(withdrawalInflationInput.value) || 0)));
         params.set('withdrawalFrequency', withdrawalFrequencyInput.value);
+        params.set('withdrawalMode', state.withdrawalMode);
       }
       const res = await fetch(`/api/backtest?${params.toString()}`);
       const data = await res.json();
@@ -702,10 +743,13 @@
     let headline;
     if (retirement) {
       const rateText = `${(retirement.withdrawalRate * 100).toFixed(1)}%`;
+      const withdrawalText = retirement.withdrawalMode === 'dynamic'
+        ? `${rateText} of the current balance each period`
+        : `${rateText} of the balance per year (inflation-adjusted)`;
       if (retirement.depletedDate) {
-        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then been <strong class="neg">fully depleted on ${formatDate(retirement.depletedDate)}</strong> withdrawing ${rateText} of the balance per year (inflation-adjusted).`;
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then been <strong class="neg">fully depleted on ${formatDate(retirement.depletedDate)}</strong> withdrawing ${withdrawalText}.`;
       } else {
-        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then survived withdrawals of ${rateText} of the balance per year (inflation-adjusted), ending at <strong>${formatMoney(endingValue)}</strong>.`;
+        headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(retirementValue)}</strong> by retirement, then survived withdrawals of ${withdrawalText}, ending at <strong>${formatMoney(endingValue)}</strong>.`;
       }
     } else {
       headline = `With ${rebalanceText}, this portfolio would have grown to <strong>${formatMoney(endingValue)}</strong>, an annualized return of <strong>${xirrText}</strong>.`;
