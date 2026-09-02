@@ -48,11 +48,11 @@
         </label>
         <label class="form-field">
           <span>Total TFSA contributions made, ever</span>
-          <input type="number" id="tfsaContributionsInput" value="0" min="0" step="100" inputmode="decimal">
+          <input type="text" id="tfsaContributionsInput" value="0" inputmode="decimal">
         </label>
         <label class="form-field">
           <span>Total TFSA withdrawals made before this year</span>
-          <input type="number" id="tfsaWithdrawalsInput" value="0" min="0" step="100" inputmode="decimal">
+          <input type="text" id="tfsaWithdrawalsInput" value="0" inputmode="decimal">
         </label>
       </div>
       <div class="disclaimer-note">
@@ -73,19 +73,19 @@
       <div class="form-grid">
         <label class="form-field">
           <span id="rrspIncomeLabel">Earned income, prior year</span>
-          <input type="number" id="rrspIncomeInput" value="60000" min="0" step="500" inputmode="decimal">
+          <input type="text" id="rrspIncomeInput" value="60,000" inputmode="decimal">
         </label>
         <label class="form-field">
           <span>Unused RRSP room, carried forward<button class="term-info-btn" data-term="carryforward" aria-label="What does carried forward mean?" aria-expanded="false" type="button">i</button> (from your Notice of Assessment)</span>
-          <input type="number" id="rrspCarryforwardInput" value="0" min="0" step="100" inputmode="decimal">
+          <input type="text" id="rrspCarryforwardInput" value="0" inputmode="decimal">
         </label>
         <label class="form-field">
           <span id="rrspPensionLabel">Pension adjustment, prior year (if any)</span>
-          <input type="number" id="rrspPensionInput" value="0" min="0" step="100" inputmode="decimal">
+          <input type="text" id="rrspPensionInput" value="0" inputmode="decimal">
         </label>
         <label class="form-field">
           <span id="rrspContributedLabel">RRSP contributions made this year</span>
-          <input type="number" id="rrspContributedInput" value="0" min="0" step="100" inputmode="decimal">
+          <input type="text" id="rrspContributedInput" value="0" inputmode="decimal">
         </label>
       </div>
       <div class="disclaimer-note">
@@ -110,6 +110,7 @@
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
   <script src="/js/term-info.js"></script>
+  <script src="/js/currency-input.js"></script>
   <script src="/js/contribution-calculator.js"></script>
 </body>
 </html>

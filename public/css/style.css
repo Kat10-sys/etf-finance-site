@@ -365,6 +365,13 @@ footer {
   border-color: var(--navy);
   color: white;
 }
+.range-btn:focus-visible,
+.currency-btn:focus-visible,
+.metric-btn:focus-visible,
+.link-btn:focus-visible {
+  outline: 2px solid var(--teal-light);
+  outline-offset: 2px;
+}
 .range-meta { font-size: 0.82rem; color: var(--text-muted); }
 
 .custom-range-row {

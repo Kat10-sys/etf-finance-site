@@ -38,8 +38,8 @@
 
   function renderTFSA() {
     const age18Year = Math.round(Number(tfsaAge18YearInput.value) || currentYear);
-    const contributions = Math.max(0, Number(tfsaContributionsInput.value) || 0);
-    const withdrawals = Math.max(0, Number(tfsaWithdrawalsInput.value) || 0);
+    const contributions = Math.max(0, window.parseFormattedNumber(tfsaContributionsInput.value));
+    const withdrawals = Math.max(0, window.parseFormattedNumber(tfsaWithdrawalsInput.value));
 
     const tableYear = Math.min(currentYear, TFSA_LAST_KNOWN_YEAR);
     const startYear = Math.max(2009, age18Year);
@@ -118,10 +118,10 @@
 
   function renderRRSP() {
     const priorYear = currentYear - 1;
-    const income = Math.max(0, Number(rrspIncomeInput.value) || 0);
-    const carryforward = Math.max(0, Number(rrspCarryforwardInput.value) || 0);
-    const pensionAdjustment = Math.max(0, Number(rrspPensionInput.value) || 0);
-    const contributed = Math.max(0, Number(rrspContributedInput.value) || 0);
+    const income = Math.max(0, window.parseFormattedNumber(rrspIncomeInput.value));
+    const carryforward = Math.max(0, window.parseFormattedNumber(rrspCarryforwardInput.value));
+    const pensionAdjustment = Math.max(0, window.parseFormattedNumber(rrspPensionInput.value));
+    const contributed = Math.max(0, window.parseFormattedNumber(rrspContributedInput.value));
 
     const dollarMax = RRSP_MAX[currentYear] || RRSP_MAX[RRSP_LAST_KNOWN_YEAR];
     const staleNote = currentYear > RRSP_LAST_KNOWN_YEAR
@@ -188,6 +188,12 @@
   [rrspIncomeInput, rrspCarryforwardInput, rrspPensionInput, rrspContributedInput].forEach((el) => {
     el.addEventListener('input', renderRRSP);
   });
+
+  if (window.enableThousandsFormatting) {
+    [tfsaContributionsInput, tfsaWithdrawalsInput, rrspIncomeInput, rrspCarryforwardInput, rrspPensionInput, rrspContributedInput].forEach((el) => {
+      enableThousandsFormatting(el);
+    });
+  }
 
   renderTFSA();
   renderRRSP();

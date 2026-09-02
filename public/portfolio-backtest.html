@@ -67,11 +67,11 @@
       <div class="form-grid" style="margin-top:20px">
         <label class="form-field">
           <span>Initial investment</span>
-          <input type="number" id="initialInput" value="10000" min="0" step="100" inputmode="decimal">
+          <input type="text" id="initialInput" value="10,000" inputmode="decimal">
         </label>
         <label class="form-field">
           <span>Periodic contribution</span>
-          <input type="number" id="contributionInput" value="0" min="0" step="10" inputmode="decimal">
+          <input type="text" id="contributionInput" value="0" inputmode="decimal">
         </label>
         <label class="form-field">
           <span>Contribution frequency</span>
@@ -163,7 +163,7 @@
         <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
         <button class="btn secondary" id="exportCsvBtn" style="display:none">Export CSV</button>
       </div>
-      <div class="status-line" id="statusLine"></div>
+      <div class="status-line" id="statusLine" aria-live="polite" aria-atomic="true"></div>
     </div>
 
     <div id="resultsSection">
@@ -251,6 +251,8 @@
   <script src="/js/theme-toggle.js"></script>
   <script src="/js/nav-toggle.js"></script>
   <script src="/js/term-info.js"></script>
+  <script src="/js/currency-input.js"></script>
+  <script src="/js/ticker-autocomplete.js"></script>
   <script src="/js/portfolio-backtest.js"></script>
 </body>
 </html>

@@ -11,6 +11,27 @@
     lastResults: null,
   };
 
+  // Remembers the last range/currency choice across visits (a URL param,
+  // when present, always wins -- this is only the fallback for a plain
+  // revisit with no query string).
+  const PREFS_KEY = 'etfComparisonPrefs';
+  function loadPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+  function savePref(key, value) {
+    try {
+      const prefs = loadPrefs();
+      prefs[key] = value;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (e) {
+      // localStorage unavailable (private browsing, etc.) -- preference just won't persist
+    }
+  }
+
   const METRIC_LABELS = {
     priceReturn: 'Price Return (%)',
     dividendPlusCash: 'Dividend + Cash (%)',
@@ -137,6 +158,7 @@
         customStartInput.value = state.customStart;
         customEndInput.value = state.customEnd;
       }
+      savePref('range', state.range);
       updateURL();
       if (state.lastResults && (state.range !== 'custom' || state.customStart)) runCompare();
     });
@@ -170,6 +192,7 @@
       currencyButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.currency = btn.dataset.currency;
+      savePref('currency', state.currency);
       updateURL();
       if (state.lastResults) runCompare();
     });
@@ -220,7 +243,8 @@
       .filter((s) => isValidTicker(s));
     state.tickers = symbols.slice(0, 8);
 
-    const range = params.get('range');
+    const prefs = loadPrefs();
+    const range = params.get('range') || prefs.range;
     if (range) {
       state.range = range;
       rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
@@ -240,7 +264,7 @@
       metricButtons.forEach((b) => b.classList.toggle('active', b.dataset.metric === metric));
     }
 
-    const currency = params.get('currency');
+    const currency = params.get('currency') || prefs.currency;
     if (currency === 'CAD' || currency === 'USD') {
       state.currency = currency;
       currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
@@ -302,7 +326,7 @@
       if (data.fxErrors && Object.keys(data.fxErrors).length) {
         problems.push(...Object.entries(data.fxErrors).map(([pair, m]) => `${pair} exchange rate: ${m}`));
       }
-      showStatus(problems.length ? `Some data failed to load — ${problems.join(' · ')}` : '', problems.length > 0);
+      showStatus(problems.length ? `Some data failed to load — ${problems.join(' · ')}` : 'Comparison updated.', problems.length > 0);
 
       if (state.range === 'max-common') {
         rangeMeta.textContent = `Max common available data start: ${formatDate(data.commonStartDate)}`;
@@ -345,7 +369,20 @@
     });
 
     const theme = chartTheme();
-    const ctx = document.getElementById('returnChart').getContext('2d');
+    const returnCanvas = document.getElementById('returnChart');
+    const endingSummary = symbols
+      .map((s) => {
+        const curve = results[s].curve;
+        const last = curve[curve.length - 1];
+        const pct = last ? (last[metric] * 100).toFixed(1) : null;
+        return pct != null ? `${s} ${pct >= 0 ? '+' : ''}${pct}%` : null;
+      })
+      .filter(Boolean)
+      .join(', ');
+    returnCanvas.setAttribute('role', 'img');
+    returnCanvas.setAttribute('aria-label', `Line chart of ${METRIC_LABELS[metric]} over time. Ending values: ${endingSummary}.`);
+
+    const ctx = returnCanvas.getContext('2d');
     if (returnChart) returnChart.destroy();
     returnChart = new Chart(ctx, {
       type: 'line',
@@ -517,6 +554,11 @@
       return;
     }
     const theme = chartTheme();
+    const kind = canvasId.startsWith('sector-') ? 'Sector' : 'Geographic';
+    const summary = weightings.map((w) => `${w.label} ${(w.weight * 100).toFixed(1)}%`).join(', ');
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `${kind} allocation pie chart: ${summary}.`);
+
     const ctx = canvas.getContext('2d');
     if (pieCharts[canvasId]) pieCharts[canvasId].destroy();
     pieCharts[canvasId] = new Chart(ctx, {
@@ -544,6 +586,10 @@
   const todayISO = toISODate(Date.now());
   customStartInput.max = todayISO;
   customEndInput.max = todayISO;
+
+  if (window.enableTickerAutocomplete) {
+    enableTickerAutocomplete(tickerInput, 'tickerSuggestions');
+  }
 
   restoreFromURL();
 })();

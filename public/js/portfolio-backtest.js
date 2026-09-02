@@ -13,6 +13,27 @@
     lastResults: null,
   };
 
+  // Remembers the last currency/dollar-mode/range choice across visits (a
+  // URL param, when present, always wins -- this is only the fallback for a
+  // plain revisit with no query string).
+  const PREFS_KEY = 'portfolioBacktestPrefs';
+  function loadPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+  function savePref(key, value) {
+    try {
+      const prefs = loadPrefs();
+      prefs[key] = value;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (e) {
+      // localStorage unavailable (private browsing, etc.) -- preference just won't persist
+    }
+  }
+
   const tickerInput = document.getElementById('tickerInput');
   const weightInput = document.getElementById('weightInput');
   const addTickerBtn = document.getElementById('addTickerBtn');
@@ -221,6 +242,7 @@
         customStartInput.value = state.customStart;
         customEndInput.value = state.customEnd;
       }
+      savePref('range', state.range);
       updateURL();
       if (state.lastResults && (state.range !== 'custom' || state.customStart)) runBacktest();
     });
@@ -269,6 +291,7 @@
       currencyButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.currency = btn.dataset.currency;
+      savePref('currency', state.currency);
       updateURL();
       if (state.lastResults) runBacktest();
     });
@@ -279,6 +302,7 @@
       dollarModeButtons.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.dollarMode = btn.dataset.dollarMode;
+      savePref('dollarMode', state.dollarMode);
       updateURL();
       // Pure display transform of already-fetched results -- the real-dollar
       // figures are already in the response, so no need to hit the API again.
@@ -448,8 +472,8 @@
     if (Number(riskFreeRateInput.value) > 0) params.set('riskFreeRate', riskFreeRateInput.value);
     if (benchmarkInput.value) params.set('benchmark', benchmarkInput.value);
     if (state.dollarMode === 'real') params.set('dollarMode', 'real');
-    params.set('initial', initialInput.value || '0');
-    params.set('contribution', contributionInput.value || '0');
+    params.set('initial', String(window.parseFormattedNumber(initialInput.value)));
+    params.set('contribution', String(window.parseFormattedNumber(contributionInput.value)));
     params.set('frequency', frequencyInput.value);
     if (retirementToggle.checked) {
       params.set('retireAfterYears', retireAfterYearsInput.value || '0');
@@ -469,7 +493,8 @@
     const weights = (params.get('weights') || '').split(',').map((w) => Number(w));
     state.entries = symbols.slice(0, 8).map((sym, i) => ({ symbol: sym, weight: Number.isFinite(weights[i]) ? weights[i] : 0 }));
 
-    const range = params.get('range');
+    const prefs = loadPrefs();
+    const range = params.get('range') || prefs.range;
     if (range) {
       state.range = range;
       rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
@@ -482,13 +507,13 @@
       customRangeRow.style.display = 'flex';
     }
 
-    const currency = params.get('currency');
+    const currency = params.get('currency') || prefs.currency;
     if (currency === 'CAD' || currency === 'USD') {
       state.currency = currency;
       currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
     }
 
-    const dollarMode = params.get('dollarMode');
+    const dollarMode = params.get('dollarMode') || prefs.dollarMode;
     if (dollarMode === 'real') {
       state.dollarMode = 'real';
       dollarModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.dollarMode === 'real'));
@@ -506,8 +531,8 @@
       if (isValidTicker(normalized)) benchmarkInput.value = normalized;
     }
 
-    if (params.get('initial') != null) initialInput.value = params.get('initial');
-    if (params.get('contribution') != null) contributionInput.value = params.get('contribution');
+    if (params.get('initial') != null) initialInput.value = window.formatThousands(params.get('initial'));
+    if (params.get('contribution') != null) contributionInput.value = window.formatThousands(params.get('contribution'));
     const frequency = params.get('frequency');
     if (frequency === 'monthly' || frequency === 'annually') frequencyInput.value = frequency;
 
@@ -542,8 +567,8 @@
       showStatus('Pick a start date for the custom range.', true);
       return;
     }
-    const initial = Math.max(0, Number(initialInput.value) || 0);
-    const contribution = Math.max(0, Number(contributionInput.value) || 0);
+    const initial = Math.max(0, window.parseFormattedNumber(initialInput.value));
+    const contribution = Math.max(0, window.parseFormattedNumber(contributionInput.value));
     if (initial <= 0 && contribution <= 0) {
       showStatus('Enter an initial investment or a contribution amount.', true);
       return;
@@ -594,7 +619,7 @@
       if (data.fxErrors && Object.keys(data.fxErrors).length) {
         problems.push(...Object.entries(data.fxErrors).map(([pair, m]) => `${pair} exchange rate: ${m}`));
       }
-      showStatus(problems.length ? `Some data failed to load — ${problems.join(' · ')}` : '', problems.length > 0);
+      showStatus(problems.length ? `Some data failed to load — ${problems.join(' · ')}` : 'Backtest updated.', problems.length > 0);
 
       rangeMeta.textContent = `${formatDate(data.startDate)} → ${formatDate(data.endDate)}`;
 
@@ -643,7 +668,14 @@
       });
     }
 
-    const ctx = document.getElementById('annualReturnsChart').getContext('2d');
+    const annualReturnsCanvas = document.getElementById('annualReturnsChart');
+    const returnsSummary = data.annualReturnsByYear
+      .map((y) => `${y.year}: ${y.return >= 0 ? '+' : ''}${(y.return * 100).toFixed(1)}%`)
+      .join(', ');
+    annualReturnsCanvas.setAttribute('role', 'img');
+    annualReturnsCanvas.setAttribute('aria-label', `Bar chart of annual returns by year. ${returnsSummary}.`);
+
+    const ctx = annualReturnsCanvas.getContext('2d');
     if (annualReturnsChart) annualReturnsChart.destroy();
     annualReturnsChart = new Chart(ctx, {
       type: 'bar',
@@ -813,7 +845,20 @@
       });
     }
 
-    const ctx = document.getElementById('backtestChart').getContext('2d');
+    const backtestCanvas = document.getElementById('backtestChart');
+    const firstPoint = curve[0];
+    const lastPoint = curve[curve.length - 1];
+    const firstVal = firstPoint.value * pointRatio(firstPoint, data);
+    const lastVal = lastPoint.value * pointRatio(lastPoint, data);
+    const pctChange = firstVal > 0 ? ((lastVal / firstVal - 1) * 100).toFixed(1) : null;
+    const benchmarkNote = data.benchmark && !data.benchmark.error ? ` Includes a benchmark comparison against ${data.benchmark.symbol}.` : '';
+    backtestCanvas.setAttribute('role', 'img');
+    backtestCanvas.setAttribute(
+      'aria-label',
+      `Stacked bar chart of portfolio value from ${formatDate(firstPoint.date)} to ${formatDate(lastPoint.date)}, starting at ${formatMoney(firstVal)} and ending at ${formatMoney(lastVal)}${pctChange != null ? ` (${pctChange >= 0 ? '+' : ''}${pctChange}%)` : ''}.${benchmarkNote} Full data available in the table below.`
+    );
+
+    const ctx = backtestCanvas.getContext('2d');
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: 'bar',
@@ -980,6 +1025,15 @@
   const todayISO = toISODate(Date.now());
   customStartInput.max = todayISO;
   customEndInput.max = todayISO;
+
+  if (window.enableTickerAutocomplete) {
+    enableTickerAutocomplete(tickerInput, 'tickerSuggestions');
+    enableTickerAutocomplete(benchmarkInput, 'benchmarkSuggestions');
+  }
+  if (window.enableThousandsFormatting) {
+    enableThousandsFormatting(initialInput);
+    enableThousandsFormatting(contributionInput);
+  }
 
   restoreFromURL();
 })();

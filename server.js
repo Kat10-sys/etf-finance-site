@@ -1634,6 +1634,45 @@ app.get('/api/exposure', async (req, res) => {
   }
 });
 
+// Ticker-name autocomplete for the symbol input fields. Uses Yahoo's
+// unauthenticated search endpoint (same one that backs the search box on
+// finance.yahoo.com) -- no crumb needed, so this works even while the
+// crumb-authenticated exposure endpoint is still warming up after a deploy.
+const searchCache = new Map(); // query -> { fetchedAt, results }
+const SEARCH_TTL = 10 * 60 * 1000;
+
+app.get('/api/ticker-search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 1) return res.json({ results: [] });
+
+    const cacheKey = q.toLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < SEARCH_TTL) {
+      return res.json({ results: cached.results });
+    }
+
+    const searchResult = await yahooFinance.search(q, { quotesCount: 10, newsCount: 0 });
+    const seen = new Set();
+    const results = (searchResult.quotes || [])
+      .filter((quote) => (quote.quoteType === 'ETF' || quote.quoteType === 'EQUITY') && quote.symbol)
+      .map((quote) => ({
+        symbol: normalizeSymbol(quote.symbol),
+        name: quote.shortname || quote.longname || '',
+      }))
+      .filter((r) => isValidTickerFormat(r.symbol) && !seen.has(r.symbol) && seen.add(r.symbol))
+      .slice(0, 8);
+
+    searchCache.set(cacheKey, { fetchedAt: Date.now(), results });
+    res.json({ results });
+  } catch (e) {
+    // Best-effort feature -- a failed search should never block manually
+    // typing a ticker in, so degrade to an empty suggestion list rather
+    // than surfacing an error.
+    res.json({ results: [] });
+  }
+});
+
 function classifyRegionByName(name) {
   const n = String(name || '').toLowerCase();
   if (/(emerging)/.test(n)) return 'Emerging Markets';

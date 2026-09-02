@@ -75,13 +75,13 @@
   }
 
   function render() {
-    const initial = Math.max(0, Number(initialInput.value) || 0);
+    const initial = Math.max(0, window.parseFormattedNumber(initialInput.value));
     const years = Math.min(60, Math.max(1, Math.round(Number(yearsInput.value) || 0)));
     // Clamped to the field's own min/max -- those HTML attributes only
     // affect the spinner arrows, not typed input, so without this a stray
     // extra digit (500 instead of 50) compounds into a meaningless number.
     const annualRate = Math.max(-20, Math.min(30, Number(returnInput.value) || 0)) / 100;
-    const contribution = Math.max(0, Number(contributionInput.value) || 0);
+    const contribution = Math.max(0, window.parseFormattedNumber(contributionInput.value));
     const contributionsPerYear = Number(frequencyInput.value) === 1 ? 1 : 12;
     const annualInflation = Math.max(0, Math.min(15, Number(inflationInput.value) || 0)) / 100;
     const growContribution = increaseWithInflation.checked;
@@ -156,7 +156,13 @@
     const dataA = yearlyA.map((y) => deflateYear(y.balance, y.year));
     const dataB = yearlyB.map((y) => deflateYear(y.balance, y.year));
 
-    const ctx = document.getElementById('feeChart').getContext('2d');
+    const feeCanvas = document.getElementById('feeChart');
+    const finalA = dataA[dataA.length - 1];
+    const finalB = dataB[dataB.length - 1];
+    feeCanvas.setAttribute('role', 'img');
+    feeCanvas.setAttribute('aria-label', `Line chart comparing ending balance at two fee levels over ${labels.length} years. ${pctA}% fee reaches ${formatMoney(finalA)}; ${pctB}% fee reaches ${formatMoney(finalB)}.`);
+
+    const ctx = feeCanvas.getContext('2d');
     if (feeChart) feeChart.destroy();
     feeChart = new Chart(ctx, {
       type: 'line',
@@ -190,7 +196,13 @@
     const balanceData = yearly.map((y) => deflate(y.balance, y.year));
     const growthData = balanceData.map((bal, i) => bal - contributionsData[i]);
 
-    const ctx = document.getElementById('growthChart').getContext('2d');
+    const growthCanvas = document.getElementById('growthChart');
+    const finalContributed = contributionsData[contributionsData.length - 1];
+    const finalBalance = balanceData[balanceData.length - 1];
+    growthCanvas.setAttribute('role', 'img');
+    growthCanvas.setAttribute('aria-label', `Stacked bar chart of projected growth over ${yearly.length} years. Contributed ${formatMoney(finalContributed)}, growing to ${formatMoney(finalBalance)}.`);
+
+    const ctx = growthCanvas.getContext('2d');
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: 'bar',
@@ -280,6 +292,11 @@
       prefillNote.innerHTML = `Rate of return set to ${rate}% —${sourceText} actual ${metricText} annualized return (CAGR${cagrBtn}) from the ETF Comparison tool. Past performance does not predict future returns; this is a hypothetical illustration only.`;
       prefillNote.style.display = 'block';
     }
+  }
+
+  if (window.enableThousandsFormatting) {
+    enableThousandsFormatting(initialInput);
+    enableThousandsFormatting(contributionInput);
   }
 
   applyPrefillFromURL();
