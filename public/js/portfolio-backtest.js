@@ -245,7 +245,16 @@
 
   benchmarkInput.addEventListener('change', () => {
     const normalized = normalizeTicker(benchmarkInput.value);
-    benchmarkInput.value = normalized === '' || isValidTicker(normalized) ? normalized : '';
+    if (normalized !== '' && !isValidTicker(normalized)) {
+      benchmarkInput.value = '';
+      updateURL();
+      // Don't re-run here -- runBacktest() immediately overwrites the status
+      // line with "Fetching...", which would stomp this error message before
+      // it's ever visible.
+      showStatus(`"${normalized}" doesn't look like a valid ticker.`, true);
+      return;
+    }
+    benchmarkInput.value = normalized;
     updateURL();
     if (state.lastResults) runBacktest();
   });
