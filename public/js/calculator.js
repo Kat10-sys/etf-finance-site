@@ -380,7 +380,10 @@
       .filter(Boolean)
       .join(', ');
     returnCanvas.setAttribute('role', 'img');
-    returnCanvas.setAttribute('aria-label', `Line chart of ${METRIC_LABELS[metric]} over time. Ending values: ${endingSummary}.`);
+    returnCanvas.setAttribute(
+      'aria-label',
+      endingSummary ? `Line chart of ${METRIC_LABELS[metric]} over time. Ending values: ${endingSummary}.` : `Line chart of ${METRIC_LABELS[metric]} over time. No data available for the selected tickers.`
+    );
 
     const ctx = returnCanvas.getContext('2d');
     if (returnChart) returnChart.destroy();

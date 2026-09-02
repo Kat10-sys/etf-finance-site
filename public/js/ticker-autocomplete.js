@@ -29,6 +29,12 @@
         try {
           const res = await fetch(`/api/ticker-search?q=${encodeURIComponent(q)}`);
           const data = await res.json();
+          // Two lookups can be in flight at once if the user paused just
+          // over the debounce delay twice in a row -- if a slower, now-
+          // stale response lands after a newer query already replaced it,
+          // applying it here would silently show suggestions for text the
+          // input no longer has.
+          if (input.value.trim() !== q) return;
           datalist.innerHTML = '';
           (data.results || []).forEach((r) => {
             const opt = document.createElement('option');

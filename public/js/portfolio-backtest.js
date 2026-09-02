@@ -673,7 +673,10 @@
       .map((y) => `${y.year}: ${y.return >= 0 ? '+' : ''}${(y.return * 100).toFixed(1)}%`)
       .join(', ');
     annualReturnsCanvas.setAttribute('role', 'img');
-    annualReturnsCanvas.setAttribute('aria-label', `Bar chart of annual returns by year. ${returnsSummary}.`);
+    annualReturnsCanvas.setAttribute(
+      'aria-label',
+      returnsSummary ? `Bar chart of annual returns by year. ${returnsSummary}.` : 'Bar chart of annual returns by year. Not enough monthly data points in this range to compute annual returns.'
+    );
 
     const ctx = annualReturnsCanvas.getContext('2d');
     if (annualReturnsChart) annualReturnsChart.destroy();
