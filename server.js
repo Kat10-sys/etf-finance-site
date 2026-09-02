@@ -128,6 +128,21 @@ function normalizeSymbol(raw) {
   return String(raw || '').trim().toUpperCase();
 }
 
+// Same charset the frontend enforces on ticker input fields (letters,
+// digits, '.', '-', up to 12 chars). Symbols and error messages containing
+// them get echoed back verbatim in API responses and rendered via innerHTML
+// in a few places on the frontend (e.g. a failed benchmark lookup) -- the
+// client-side check alone doesn't protect the API itself, since anyone can
+// call it directly (or reach it via a crafted URL on a field, like
+// benchmark, that doesn't re-validate on restore) with an arbitrary string.
+// Rejecting anything outside this charset here closes that off at the
+// source rather than relying on every current and future render site to
+// escape it correctly.
+const TICKER_PATTERN = /^[A-Z0-9.\-]{1,12}$/;
+function isValidTickerFormat(sym) {
+  return TICKER_PATTERN.test(sym);
+}
+
 // Yahoo Finance's chart API is occasionally missing years of price history
 // for a ticker that has actually traded continuously since an earlier date
 // (most often after an issuer rebrand, even when the ticker itself never
@@ -376,7 +391,7 @@ app.get('/api/compare', async (req, res) => {
     const symbolsRaw = String(req.query.symbols || '')
       .split(',')
       .map((s) => normalizeSymbol(s))
-      .filter(Boolean);
+      .filter(isValidTickerFormat);
     const range = req.query.range || 'max-common';
     if (symbolsRaw.length === 0) return res.status(400).json({ error: 'Provide at least one symbol.' });
     if (symbolsRaw.length > 8) return res.status(400).json({ error: 'Maximum 8 symbols at a time.' });
@@ -796,7 +811,7 @@ app.get('/api/backtest', async (req, res) => {
     const symbolsRaw = String(req.query.symbols || '')
       .split(',')
       .map((s) => normalizeSymbol(s))
-      .filter(Boolean);
+      .filter(isValidTickerFormat);
     const weightsRaw = String(req.query.weights || '').split(',').map((w) => parseFloat(w));
     if (symbolsRaw.length === 0) return res.status(400).json({ error: 'Provide at least one symbol.' });
     if (symbolsRaw.length > 8) return res.status(400).json({ error: 'Maximum 8 symbols at a time.' });
@@ -836,7 +851,8 @@ app.get('/api/backtest', async (req, res) => {
     // Optional benchmark ticker, simulated the same way as the portfolio
     // (same cash flows) for an apples-to-apples comparison. Kept best-effort:
     // a benchmark that fails to load never blocks the main portfolio result.
-    const benchmarkSymbol = req.query.benchmark ? normalizeSymbol(req.query.benchmark) : null;
+    const rawBenchmark = req.query.benchmark ? normalizeSymbol(req.query.benchmark) : null;
+    const benchmarkSymbol = rawBenchmark && isValidTickerFormat(rawBenchmark) ? rawBenchmark : null;
     let benchmarkHistory = null;
     let benchmarkError = null;
     if (benchmarkSymbol) {
@@ -1429,7 +1445,7 @@ async function quoteSummaryWithRetry(symbol, options, attempts = 5) {
 app.get('/api/exposure', async (req, res) => {
   try {
     const symbol = normalizeSymbol(req.query.symbol);
-    if (!symbol) return res.status(400).json({ error: 'Provide a symbol.' });
+    if (!symbol || !isValidTickerFormat(symbol)) return res.status(400).json({ error: 'Provide a valid symbol.' });
 
     const cached = exposureCache.get(symbol);
     if (cached && Date.now() - cached.fetchedAt < EXPOSURE_TTL) {

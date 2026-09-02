@@ -244,7 +244,8 @@
   });
 
   benchmarkInput.addEventListener('change', () => {
-    benchmarkInput.value = normalizeTicker(benchmarkInput.value);
+    const normalized = normalizeTicker(benchmarkInput.value);
+    benchmarkInput.value = normalized === '' || isValidTicker(normalized) ? normalized : '';
     updateURL();
     if (state.lastResults) runBacktest();
   });
@@ -457,7 +458,10 @@
       rebalanceInput.value = rebalance;
     }
     if (params.get('riskFreeRate') != null) riskFreeRateInput.value = params.get('riskFreeRate');
-    if (params.get('benchmark') != null) benchmarkInput.value = normalizeTicker(params.get('benchmark'));
+    if (params.get('benchmark') != null) {
+      const normalized = normalizeTicker(params.get('benchmark'));
+      if (isValidTicker(normalized)) benchmarkInput.value = normalized;
+    }
 
     if (params.get('initial') != null) initialInput.value = params.get('initial');
     if (params.get('contribution') != null) contributionInput.value = params.get('contribution');
