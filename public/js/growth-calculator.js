@@ -50,18 +50,21 @@
     const yearly = [];
 
     for (let year = 1; year <= years; year++) {
-      const yearContribution = growContribution ? contribution * Math.pow(1 + annualInflation, year - 1) : contribution;
+      const installment = growContribution ? contribution * Math.pow(1 + annualInflation, year - 1) : contribution;
+      let yearTotal = 0;
       for (let month = 1; month <= 12; month++) {
         balance *= 1 + monthlyRate;
         if (contributionsPerYear === 12) {
-          balance += yearContribution;
-          cumulativeContributions += yearContribution;
+          balance += installment;
+          cumulativeContributions += installment;
+          yearTotal += installment;
         } else if (month === 12) {
-          balance += yearContribution;
-          cumulativeContributions += yearContribution;
+          balance += installment;
+          cumulativeContributions += installment;
+          yearTotal += installment;
         }
       }
-      yearly.push({ year, balance, cumulativeContributions });
+      yearly.push({ year, balance, cumulativeContributions, yearTotal });
     }
 
     return yearly;
@@ -234,14 +237,27 @@
 
   function renderTable(yearly, initial, deflate) {
     growthTableBody.innerHTML = '';
+    // "Contributions to date" is cumulative, which hides how much was
+    // actually added in any single year -- especially useful once "increase
+    // with inflation" is on and that amount changes year to year. This is
+    // deflated on its own (not derived by diffing consecutive cumulative
+    // totals): the cumulative total for year y is discounted as a lump sum
+    // by y's inflation factor, so diffing two such totals doesn't recover
+    // the true real value of that one year's contribution -- it's still
+    // carrying a rediscount of every prior year's contribution too. E.g. with
+    // contributions growing at exactly the inflation rate, the real value of
+    // each year's own contribution is constant, but diffing the deflated
+    // cumulative totals showed it declining year over year.
     yearly.forEach((y) => {
       const contributions = deflate(y.cumulativeContributions, y.year) + initial;
+      const contributedThisYear = deflate(y.yearTotal, y.year);
       const balance = deflate(y.balance, y.year);
       const growth = balance - contributions;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${y.year}</td>
         <td>${formatMoney(contributions)}</td>
+        <td>${formatMoney(contributedThisYear)}</td>
         <td>${formatMoney(growth)}</td>
         <td>${formatMoney(balance)}</td>
       `;

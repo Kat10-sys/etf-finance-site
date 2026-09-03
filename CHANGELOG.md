@@ -38,6 +38,23 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Add a "Contributed This Year" column to the Growth Calculator table**
+  — same motivation as the Portfolio Backtest column below: "Contributions
+  to date" is cumulative, which hides the actual per-year amount, especially
+  once "increase contribution with inflation" makes it change every year.
+  Initially implemented by diffing consecutive (deflated) cumulative
+  totals, same approach as the backtest column — but caught in testing that
+  this is wrong here: in real-dollar mode each cumulative total is a
+  lump-sum discount of the *entire* history by that year's inflation
+  factor, so diffing two of them doesn't recover the true value of that
+  one year's contribution (it showed a declining pattern even when
+  contributions grow at exactly the inflation rate, where the real
+  per-year value should be flat). Fixed by tracking each year's own
+  contribution total during the simulation (`yearTotal` in
+  `public/js/growth-calculator.js`) and deflating it directly, instead of
+  diffing cumulative sums. Verified against nominal/real-dollar mode and
+  monthly/annual contribution frequency.
+
 - **Add a "Withdrawn This Period" column to the Portfolio Backtest table**
   (and CSV export) — the existing "Total Withdrawn" column is a running
   cumulative total, which doesn't show how much was actually withdrawn in
