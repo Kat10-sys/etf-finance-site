@@ -1,6 +1,6 @@
 {
   "symbol": "XEQT.TO",
-  "asOf": "2026-08-31",
+  "asOf": "2026-09-03",
   "expenseRatio": 0.0020,
-  "expenseRatioNote": "Yahoo Finance reports no real expense ratio for XEQT.TO (sometimes a placeholder 0%). This is BlackRock Canada's own published Management Expense Ratio (MER), from blackrock.com's iShares Core Equity ETF Portfolio product page. Note: the management fee was cut to 0.17% effective Dec 18, 2025, but the MER has not yet been recalculated to reflect that."
+  "expenseRatioNote": "Yahoo Finance reports no real expense ratio for XEQT.TO (sometimes a placeholder 0%). This is BlackRock Canada's own published Management Expense Ratio (MER) as of December 31, 2025, from the fund's official ETF Facts document at blackrock.com/ca. The management fee was cut from 0.18% to 0.17% effective Dec 18, 2025, but that's only 13 days of the reported fiscal year, so this MER is still mostly the pre-cut rate; the lower fee should show up more fully in next year's figure."
 }

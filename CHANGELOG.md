@@ -36,6 +36,29 @@ scratch. It also gives future work a place to land before it's built.
 
 ---
 
+## 2026-09-03
+
+- **Add expense-ratio overrides for 15 more popular ETFs missing MER data**
+  (`USSX.TO`, `VCE.TO`, `VUS.TO`, `VSB.TO`, `VSC.TO`, `XQQ.TO`, `XWD.TO`,
+  `XSU.TO`, `XFN.TO`, `XMA.TO`, `XST.TO`, `XHC.TO`, `XCB.TO`, `XHY.TO`,
+  `ZUQ.TO`) — found while explaining a leveraged-ETF CAGR question (checking
+  `USSX.TO`'s MER surfaced that Yahoo had no expense ratio for it, prompted
+  a broader scan of popular Vanguard/iShares/BMO/Global X funds for the same
+  gap). Every value traces to that issuer's own current ETF Facts/factsheet
+  document (BlackRock, Vanguard, BMO, Global X), not an estimate.
+
+- **Refresh iShares Core Portfolio series MERs and add the two missing ones**
+  (`XBAL.TO`, `XCNS.TO`, `XEQT.TO`, `XGRO.TO`, `XINC.TO`) — `XCNS.TO` and
+  `XINC.TO` had no override at all; `XBAL.TO`/`XEQT.TO`/`XGRO.TO` already had
+  one but with a stale note about a pending Dec 18, 2025 management-fee cut
+  (0.18% → 0.17%). Pulled each fund's current ETF Facts (MER as of Dec 31,
+  2025): all five are still 0.19–0.20%, because the cut only covers the last
+  13 days of that reporting year — the lower fee won't fully show up in the
+  MER until next year's figure. Notes updated to explain that instead of
+  saying the recalculation just hasn't happened yet.
+
+---
+
 ## 2026-09-02
 
 - **Fix two bugs found while testing the accessibility/QoL features** (`e287482`)
