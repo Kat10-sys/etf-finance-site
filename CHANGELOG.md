@@ -38,6 +38,31 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Withhold annualized return (XIRR) and risk metrics for Portfolio
+  Backtest windows shorter than ~3 months** — checked this tool for the
+  same two bug classes just found/fixed elsewhere. The "cumulative sum
+  discounted by a single end-of-horizon factor" issue (the Growth
+  Calculator bug) doesn't exist here: `totalContributedReal`/
+  `totalWithdrawnReal` already apply the CPI ratio to each contribution/
+  withdrawal individually at the moment it happens, not to a lump nominal
+  total after the fact — already correct. But the "misleading annualized
+  figure from a too-short window" issue (the ETF Comparison CAGR fix) did:
+  `annualizedReturn`/`annualizedReturnReal` (XIRR) had no window-length
+  guard at all, and `standardDeviation`/`sharpeRatio`/`sortinoRatio`
+  required only `validReturns.length >= 2` (2 monthly data points) before
+  being computed and shown as "annualized" figures. Added a shared
+  `MIN_ANNUALIZE_DAYS = 90` threshold in `server.js` (same ~3-month
+  threshold as the ETF Comparison fix, for consistency) and applied it in
+  both `simulateSingleAsset` (the benchmark path) and the main `/api/backtest`
+  route. Reused the client's existing "n/a" / "not enough monthly data
+  points" fallback UI (already there for a genuine `computeXIRR` solver
+  failure) and added a "(range too short to annualize)" qualifier to the
+  headline/stat XIRR text specifically, so it doesn't read as unexplained
+  missing data. Verified: a 62-day custom range and its benchmark both show
+  the fallback text for XIRR/stdev/Sharpe/Sortino while max drawdown (not
+  an annualized figure) still reports normally; a 1-year range is
+  unaffected.
+
 - **Withhold CAGR for ETF Comparison windows shorter than ~3 months**
   — found while bug-testing the Growth Calculator changes below and then
   checking ETF Comparison and the Contribution Calculator for the same class

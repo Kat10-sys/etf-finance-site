@@ -770,7 +770,12 @@
     const totalWithdrawn = real ? data.totalWithdrawnReal : data.totalWithdrawn;
     const totalGrowth = real ? data.totalGrowthReal : data.totalGrowth;
     const annualizedReturn = real ? data.annualizedReturnReal : data.annualizedReturn;
-    const xirrText = annualizedReturn != null ? `${(annualizedReturn * 100).toFixed(2)}%` : 'n/a';
+    // Matches the server's own ~3-month annualization threshold (see
+    // MIN_ANNUALIZE_DAYS in server.js) -- purely to pick the right
+    // explanatory text here, since the server already decides whether an
+    // annualized return is present.
+    const isShortWindow = (data.endDate - data.startDate) / (24 * 60 * 60 * 1000) < 90;
+    const xirrText = annualizedReturn != null ? `${(annualizedReturn * 100).toFixed(2)}%` : (isShortWindow ? 'n/a (range too short to annualize)' : 'n/a');
     const maxDrawdown = real ? data.maxDrawdownReal : data.maxDrawdown;
     const ddText = `${(maxDrawdown * 100).toFixed(1)}%`;
     const REBALANCE_LABELS = { monthly: 'monthly', quarterly: 'quarterly', semiannual: 'semi-annual', annually: 'annual' };

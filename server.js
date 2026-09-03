@@ -24,6 +24,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Below this window length, annualizing a return (XIRR) or a monthly
+// volatility estimate (standard deviation / Sharpe / Sortino) produces a
+// mathematically correct but wildly exaggerated number -- the same issue
+// fixed for the ETF Comparison tool's CAGR, and the same ~3-month threshold,
+// applied here to Portfolio Backtest's annualized return and risk metrics.
+const MIN_ANNUALIZE_DAYS = 90;
+
 // Any range not listed here (e.g. 'max-common') falls back to each
 // comparison's common available-data start date. Calendar-based (months/
 // years), not a flat day count: a flat "30 days" for "1 Month" drifts
@@ -721,9 +728,10 @@ function simulateSingleAsset({
 
   const finalEntry = dailyCurve[dailyCurve.length - 1];
   cashflows.push({ date: finalEntry.date, amount: finalEntry.value });
-  const annualizedReturn = computeXIRR(cashflows);
+  const totalDays = (finalEntry.date - timeline[0]) / DAY_MS;
+  const annualizedReturn = totalDays >= MIN_ANNUALIZE_DAYS ? computeXIRR(cashflows) : null;
   const realCashflows = cashflows.map((cf) => ({ date: cf.date, amount: cf.amount * cpiRatioToToday(cf.date) }));
-  const annualizedReturnReal = computeXIRR(realCashflows);
+  const annualizedReturnReal = totalDays >= MIN_ANNUALIZE_DAYS ? computeXIRR(realCashflows) : null;
 
   const monthlyCurve = [];
   let lastKey = null;
@@ -764,7 +772,7 @@ function simulateSingleAsset({
   let bestYear = null;
   let worstYear = null;
   let annualReturnsByYear = [];
-  if (validReturns.length >= 2) {
+  if (validReturns.length >= 2 && totalDays >= MIN_ANNUALIZE_DAYS) {
     const n = validReturns.length;
     const mean = validReturns.reduce((a, b) => a + b, 0) / n;
     const variance = validReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
@@ -1254,7 +1262,8 @@ app.get('/api/backtest', async (req, res) => {
 
     const finalEntry = dailyCurve[dailyCurve.length - 1];
     cashflows.push({ date: finalEntry.date, amount: finalEntry.value });
-    const annualizedReturn = computeXIRR(cashflows);
+    const totalDays = (finalEntry.date - timeline[0]) / DAY_MS;
+    const annualizedReturn = totalDays >= MIN_ANNUALIZE_DAYS ? computeXIRR(cashflows) : null;
 
     // Downsample to one point per calendar month for the chart/table --
     // the simulation itself still runs on real daily bars above, this just
@@ -1305,7 +1314,7 @@ app.get('/api/backtest', async (req, res) => {
     let bestYear = null;
     let worstYear = null;
     let annualReturnsByYear = [];
-    if (validReturns.length >= 2) {
+    if (validReturns.length >= 2 && totalDays >= MIN_ANNUALIZE_DAYS) {
       const n = validReturns.length;
       const mean = validReturns.reduce((a, b) => a + b, 0) / n;
       const variance = validReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (n - 1);
@@ -1347,7 +1356,7 @@ app.get('/api/backtest', async (req, res) => {
     // dollars using the CPI at its own date before re-running the same
     // money-weighted-return calculation.
     let annualizedReturnReal = null;
-    if (latestCpi != null) {
+    if (latestCpi != null && totalDays >= MIN_ANNUALIZE_DAYS) {
       const realCashflows = cashflows.map((cf) => ({ date: cf.date, amount: cf.amount * cpiRatioToToday(cf.date) }));
       annualizedReturnReal = computeXIRR(realCashflows);
     }
