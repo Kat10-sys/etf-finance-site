@@ -38,6 +38,30 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Withhold CAGR for ETF Comparison windows shorter than ~3 months**
+  — found while bug-testing the Growth Calculator changes below and then
+  checking ETF Comparison and the Contribution Calculator for the same class
+  of issue. The Contribution Calculator had no analog (no per-period
+  aggregation to get wrong). ETF Comparison's core math checked out clean
+  (price/dividend/DRIP are single point-to-point ratios, not cash-flow sums,
+  so the Growth Calculator bug's exact shape doesn't apply, and currency
+  conversion already converts each price/dividend at its own date's FX rate,
+  not a single end-of-window rate) — but selecting a short range like "1
+  Week" produced a mathematically correct, wildly exaggerated CAGR (tested:
+  a real 1-week -0.71% move on VFV.TO annualized to -42%+), and that number
+  flowed straight into the "→ Growth Calc" button's prefill as if it were a
+  legitimate long-term historical rate. `computeMetrics` in `server.js` now
+  returns `null` for `priceReturnCAGR`/`dividendPlusCashCAGR`/
+  `totalReturnDRIPCAGR` when the window is under ~90 days, reusing the
+  existing "CAGR unavailable" fallback path that already fed the "→ Growth
+  Calc" button's disabled state — so the button and the CAGR sub-values both
+  already knew how to handle a null CAGR value. `public/js/calculator.js`
+  adds a small explanatory note ("Too short to annualize" / "Range too
+  short") instead of leaving it looking like data silently went missing.
+  Verified: 1-week range shows the note and no project button; exactly-3-
+  month range (92 days, above the threshold) shows CAGR normally; 1-year
+  range unaffected.
+
 - **Fix "Total contributed" / "Investment growth" understating real-dollar
   contributions by 13–16%** — found while bug-testing the new per-year
   column above: it didn't reconcile with the existing "Total contributed"

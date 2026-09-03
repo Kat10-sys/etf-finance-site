@@ -282,9 +282,15 @@
     return `<span class="${cls}">${sign}${pct.toFixed(2)}%</span>`;
   }
 
-  function formatPercentWithCAGR(value, cagr) {
+  // isShortWindow distinguishes "CAGR withheld because the range is too
+  // short to annualize meaningfully" (server withholds it under ~3 months)
+  // from any other reason it might be null, so a short-range comparison
+  // doesn't just look like data silently went missing.
+  function formatPercentWithCAGR(value, cagr, isShortWindow) {
     const cumulative = formatPercent(value);
-    if (cagr == null || Number.isNaN(cagr)) return cumulative;
+    if (cagr == null || Number.isNaN(cagr)) {
+      return isShortWindow ? `${cumulative}<div class="cagr-sub cagr-note">Too short to annualize</div>` : cumulative;
+    }
     const cagrPct = cagr * 100;
     const sign = cagrPct >= 0 ? '+' : '';
     return `${cumulative}<div class="cagr-sub">${sign}${cagrPct.toFixed(2)}% CAGR</div>`;
@@ -432,16 +438,21 @@
         tr.innerHTML = `<td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td colspan="5" style="text-align:left;color:var(--text-muted)">Not enough history in this window (data available from ${formatDate(r.earliestAvailable)}).</td>`;
       } else {
+        // Matches the server's own ~3-month CAGR threshold (see computeMetrics
+        // in server.js) -- purely to pick the right explanatory note here,
+        // since the server already decides whether a CAGR value is present.
+        const windowDays = (r.endDate - r.startDate) / (24 * 60 * 60 * 1000);
+        const isShortWindow = windowDays < 90;
         const cagrPct = r.totalReturnDRIPCAGR != null ? (r.totalReturnDRIPCAGR * 100).toFixed(2) : '';
         const projectBtn = r.totalReturnDRIPCAGR != null
           ? `<button class="link-btn" data-symbol="${sym}" data-rate="${cagrPct}">→ Growth Calc</button>`
-          : '—';
+          : (isShortWindow ? '<span class="cagr-note">Range too short</span>' : '—');
         tr.innerHTML = `
           <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</td>
-          <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR)}</td>
-          <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR)}</td>
-          <td>${formatPercentWithCAGR(r.totalReturnDRIP, r.totalReturnDRIPCAGR)}</td>
+          <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR, isShortWindow)}</td>
+          <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR, isShortWindow)}</td>
+          <td>${formatPercentWithCAGR(r.totalReturnDRIP, r.totalReturnDRIPCAGR, isShortWindow)}</td>
           <td>${projectBtn}</td>
         `;
       }

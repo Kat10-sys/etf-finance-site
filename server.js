@@ -366,8 +366,16 @@ function computeMetrics(history, startTs, endTs) {
 
   // CAGR = (1 + cumulative return) ^ (1 / years) - 1. Years uses a 365.25
   // day-count (accounts for leap years), matching standard practice.
+  // Annualizing a window shorter than ~3 months is mathematically correct
+  // but produces a wildly exaggerated number -- a real +2% over one week
+  // compounds to a nonsensical multi-thousand-percent "annual rate" -- so
+  // CAGR is withheld below that threshold rather than shown misleadingly.
+  // This also protects the "-> Growth Calc" link, which prefills the
+  // Growth Calculator's return field from this value: null here already
+  // falls through that button's existing "CAGR unavailable" fallback.
   const years = (endPoint.date - startPoint.date) / (365.25 * DAY_MS);
-  const cagr = (cumulativeReturn) => (years > 0 ? Math.pow(1 + cumulativeReturn, 1 / years) - 1 : null);
+  const MIN_CAGR_YEARS = 90 / 365.25;
+  const cagr = (cumulativeReturn) => (years >= MIN_CAGR_YEARS ? Math.pow(1 + cumulativeReturn, 1 / years) - 1 : null);
 
   return {
     insufficientData: false,

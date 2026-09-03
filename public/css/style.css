@@ -524,6 +524,11 @@ table.results-table .symbol-inner {
   margin-top: 2px;
 }
 
+.cagr-note {
+  font-style: italic;
+  font-weight: 400;
+}
+
 .exposure-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
