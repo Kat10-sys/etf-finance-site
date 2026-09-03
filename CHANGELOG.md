@@ -38,6 +38,29 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Fix "Total contributed" / "Investment growth" understating real-dollar
+  contributions by 13–16%** — found while bug-testing the new per-year
+  column above: it didn't reconcile with the existing "Total contributed"
+  headline stat. Root cause: `cumulativeContributions` is a sum of cash
+  flows made in different years, but the old real-dollar figure discounted
+  that entire running nominal total by a single end-of-horizon inflation
+  factor (`deflateYear(finalRaw.cumulativeContributions, years)`) — valid
+  for a single point-in-time amount like the ending balance, but not for a
+  multi-year sum, since it over-discounts every contribution except the
+  most recent one. The bug also affected the chart's cumulative
+  "Contributed" series and, since "Investment growth" = balance −
+  contributions, correspondingly *overstated* investment growth by the same
+  amount whenever "Today's dollars" mode was on. Fixed by having
+  `simulate()` (`public/js/growth-calculator.js`) build up a
+  `cumulativeContributionsReal` running total that discounts each year's own
+  contribution by only that year's own factor before summing, and switching
+  `render()`, `renderChart()`, and `renderTable()` to use it directly
+  instead of re-deflating the nominal cumulative total. Verified: the
+  per-year column and the headline/chart totals now reconcile exactly
+  (0.0% diff) across a battery of test scenarios, and an 864-combination
+  sweep of initial/years/rate/contribution/frequency/inflation/mode
+  produced no NaN, Infinity, or negative-contribution values.
+
 - **Add a "Contributed This Year" column to the Growth Calculator table**
   — same motivation as the Portfolio Backtest column below: "Contributions
   to date" is cumulative, which hides the actual per-year amount, especially

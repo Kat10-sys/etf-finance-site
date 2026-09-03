@@ -40,13 +40,20 @@
   // Simulates month-by-month: interest accrues every month at the nominal
   // annual rate / 12, contributions land either every month or once a year
   // (December), and — if enabled — the contribution amount itself grows
-  // with inflation at each year boundary. Real-dollar figures are derived
-  // by discounting the nominal results at the end, rather than running a
-  // separate simulation, since both use identical cash flows.
+  // with inflation at each year boundary. The ending balance is a single
+  // point-in-time amount, so its real-dollar figure can be derived after
+  // the fact by discounting the nominal result once. Cumulative
+  // contributions are NOT a single point-in-time amount -- they're a sum of
+  // cash flows spread across many different years -- so discounting that
+  // running nominal total by one end-of-horizon factor (as this used to do)
+  // over-discounts every contribution except the most recent one. Instead,
+  // cumulativeContributionsReal is built up here by discounting each year's
+  // own contribution by only that year's own factor, then summing.
   function simulate({ initial, years, annualRate, contribution, contributionsPerYear, annualInflation, growContribution }) {
     const monthlyRate = annualRate / 12;
     let balance = initial;
     let cumulativeContributions = 0;
+    let cumulativeContributionsReal = 0;
     const yearly = [];
 
     for (let year = 1; year <= years; year++) {
@@ -64,7 +71,8 @@
           yearTotal += installment;
         }
       }
-      yearly.push({ year, balance, cumulativeContributions, yearTotal });
+      cumulativeContributionsReal += yearTotal / Math.pow(1 + annualInflation, year);
+      yearly.push({ year, balance, cumulativeContributions, cumulativeContributionsReal, yearTotal });
     }
 
     return yearly;
@@ -96,8 +104,9 @@
     const finalRaw = yearly[yearly.length - 1];
     const finalBalance = deflateYear(finalRaw.balance, years);
     // The initial investment is already in today's dollars at year 0, so it
-    // isn't discounted — only the contributions made in later years are.
-    const totalContributions = deflateYear(finalRaw.cumulativeContributions, years) + initial;
+    // isn't discounted. cumulativeContributionsReal (see simulate) is already
+    // the correctly-discounted real total, not something to deflate again.
+    const totalContributions = (displayMode === 'real' ? finalRaw.cumulativeContributionsReal : finalRaw.cumulativeContributions) + initial;
     const totalGrowth = finalBalance - totalContributions;
 
     growthHeadline.innerHTML = `In <strong>${years} year${years === 1 ? '' : 's'}</strong>, this could grow to <strong>${formatMoney(finalBalance)}</strong>${displayMode === 'real' ? ' <span class="growth-headline-note">(in today’s dollars)</span>' : ''}.`;
@@ -195,7 +204,9 @@
   function renderChart(yearly, initial, deflate) {
     const theme = chartTheme();
     const labels = yearly.map((y) => `Yr ${y.year}`);
-    const contributionsData = yearly.map((y) => deflate(y.cumulativeContributions, y.year) + initial);
+    // cumulativeContributionsReal is already correctly discounted per-year
+    // (see simulate) -- re-deflating it here would double-discount it.
+    const contributionsData = yearly.map((y) => (displayMode === 'real' ? y.cumulativeContributionsReal : y.cumulativeContributions) + initial);
     const balanceData = yearly.map((y) => deflate(y.balance, y.year));
     const growthData = balanceData.map((bal, i) => bal - contributionsData[i]);
 
@@ -239,17 +250,18 @@
     growthTableBody.innerHTML = '';
     // "Contributions to date" is cumulative, which hides how much was
     // actually added in any single year -- especially useful once "increase
-    // with inflation" is on and that amount changes year to year. This is
-    // deflated on its own (not derived by diffing consecutive cumulative
-    // totals): the cumulative total for year y is discounted as a lump sum
-    // by y's inflation factor, so diffing two such totals doesn't recover
-    // the true real value of that one year's contribution -- it's still
-    // carrying a rediscount of every prior year's contribution too. E.g. with
-    // contributions growing at exactly the inflation rate, the real value of
-    // each year's own contribution is constant, but diffing the deflated
-    // cumulative totals showed it declining year over year.
+    // with inflation" is on and that amount changes year to year. The
+    // per-year figure is deflated on its own, not derived by diffing
+    // consecutive cumulative totals: a cumulative total spans contributions
+    // made in different years, so discounting the whole thing by one factor
+    // (rather than using cumulativeContributionsReal, which discounts each
+    // year's own contribution before summing) would over-discount every
+    // contribution except the most recent -- e.g. with contributions growing
+    // at exactly the inflation rate, the real value of each year's own
+    // contribution is constant, but diffing lump-discounted cumulative
+    // totals showed it declining year over year.
     yearly.forEach((y) => {
-      const contributions = deflate(y.cumulativeContributions, y.year) + initial;
+      const contributions = (displayMode === 'real' ? y.cumulativeContributionsReal : y.cumulativeContributions) + initial;
       const contributedThisYear = deflate(y.yearTotal, y.year);
       const balance = deflate(y.balance, y.year);
       const growth = balance - contributions;
