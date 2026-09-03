@@ -38,6 +38,15 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Add a "Withdrawn This Period" column to the Portfolio Backtest table**
+  (and CSV export) — the existing "Total Withdrawn" column is a running
+  cumulative total, which doesn't show how much was actually withdrawn in
+  any single row's period at a glance. Computed client-side in
+  `public/js/portfolio-backtest.js` (`renderTable` and the CSV export) by
+  diffing each row's cumulative `withdrawn`/`withdrawnReal` against the
+  previous row's — no server-side change needed since the per-period amount
+  is fully recoverable from the existing cumulative curve data.
+
 - **Add expense-ratio overrides for 15 more popular ETFs missing MER data**
   (`USSX.TO`, `VCE.TO`, `VUS.TO`, `VSB.TO`, `VSC.TO`, `XQQ.TO`, `XWD.TO`,
   `XSU.TO`, `XFN.TO`, `XMA.TO`, `XST.TO`, `XHC.TO`, `XCB.TO`, `XHY.TO`,

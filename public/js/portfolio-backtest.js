@@ -416,19 +416,22 @@
     lines.push('');
 
     const header = ['Date', ...symbols, 'Total Contributed'];
-    if (data.retirement) header.push('Total Withdrawn');
+    if (data.retirement) header.push('Total Withdrawn', 'Withdrawn This Period');
     header.push('Total Growth', 'Total Value');
     if (hasBenchmark) header.push(`Benchmark (${data.benchmark.symbol})`);
     lines.push(header.join(','));
 
+    let prevWithdrawn = 0;
     data.curve.forEach((p) => {
       const ratio = pointRatio(p, data);
       const value = p.value * ratio;
       const contributed = real ? p.contributedReal : p.contributed;
       const withdrawn = (real ? p.withdrawnReal : p.withdrawn) || 0;
+      const periodWithdrawn = Math.max(0, withdrawn - prevWithdrawn);
+      prevWithdrawn = withdrawn;
       const growth = value - contributed + withdrawn;
       const row = [toISODate(p.date), ...symbols.map((sym) => (p.bySymbol[sym] * ratio).toFixed(2)), contributed.toFixed(2)];
-      if (data.retirement) row.push(withdrawn.toFixed(2));
+      if (data.retirement) row.push(withdrawn.toFixed(2), periodWithdrawn.toFixed(2));
       row.push(growth.toFixed(2), value.toFixed(2));
       if (hasBenchmark) {
         const benchValue = benchByDate.get(p.date);
@@ -976,23 +979,29 @@
         <th>Date</th>
         ${symbols.map((sym) => `<th>${sym}</th>`).join('')}
         <th>Total Contributed</th>
-        ${retirement ? '<th>Total Withdrawn</th>' : ''}
+        ${retirement ? '<th>Total Withdrawn</th><th>Withdrawn This Period</th>' : ''}
         <th>Total Growth</th>
         <th>Total Value</th>
       </tr>
     `;
     backtestTableBody.innerHTML = '';
+    // "Total Withdrawn" on each row is cumulative -- diffing consecutive rows
+    // gives how much was actually withdrawn during that specific row's
+    // period, which is what the running total alone doesn't show at a glance.
+    let prevWithdrawn = 0;
     curve.forEach((p) => {
       const value = p.value * pointRatio(p, data);
       const contributed = real ? p.contributedReal : p.contributed;
       const withdrawn = (real ? p.withdrawnReal : p.withdrawn) || 0;
+      const periodWithdrawn = Math.max(0, withdrawn - prevWithdrawn);
+      prevWithdrawn = withdrawn;
       const growth = value - contributed + withdrawn;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${formatDate(p.date)}</td>
         ${symbols.map((sym) => `<td>${formatMoney(p.bySymbol[sym] * pointRatio(p, data))}</td>`).join('')}
         <td>${formatMoney(contributed)}</td>
-        ${retirement ? `<td>${formatMoney(withdrawn)}</td>` : ''}
+        ${retirement ? `<td>${formatMoney(withdrawn)}</td><td>${formatMoney(periodWithdrawn)}</td>` : ''}
         <td>${formatMoney(growth)}</td>
         <td>${formatMoney(value)}</td>
       `;
