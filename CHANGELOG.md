@@ -38,6 +38,29 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-03
 
+- **Clarified the Max Drawdown tooltip to explain why it differs from
+  Portfolio Visualizer's number for the same portfolio** — user compared
+  our Portfolio Backtest output for 100% SPY, 2016-09-01 to 2026-08-31
+  against Portfolio Visualizer's classic backtest tool for the same range.
+  CAGR, Sharpe, Sortino, and best/worst year all matched closely (both
+  compute those from monthly returns), but max drawdown didn't: ours
+  showed 33.7%, Portfolio Visualizer showed 23.9%. Root cause isn't a bug
+  in either tool — it's a sampling-granularity difference. Our
+  `maxDrawdown`/`maxDrawdownReal` (in `server.js`, both the single-asset
+  and multi-asset backtest paths) are computed from the full daily price
+  curve (`dailyCurve`, one point per calendar day), so they catch the true
+  peak-to-trough low even when it occurs mid-month and the price partly
+  recovers by month-end. Portfolio Visualizer's classic tool samples only
+  month-end values, so it never "sees" a trough like SPY's March 23, 2020
+  COVID-crash close — it only compares Feb-2020-close to Mar-2020-close,
+  understating the real decline. Our 33.7% lines up with the
+  well-documented ~33-34% peak-to-trough SPY total-return drawdown for
+  that crash on closing prices, so daily is the more accurate choice here
+  and was kept as-is. Added a clause to the `max-drawdown` glossary entry
+  (`public/js/term-info.js`) explaining the daily-vs-monthly distinction so
+  users aren't confused by the mismatch against tools that sample
+  month-end only.
+
 - **Withhold annualized return (XIRR) and risk metrics for Portfolio
   Backtest windows shorter than ~3 months** — checked this tool for the
   same two bug classes just found/fixed elsewhere. The "cumulative sum
