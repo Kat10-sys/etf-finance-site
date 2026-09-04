@@ -145,8 +145,7 @@
 
   rangeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      rangeButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(rangeButtons, (b) => b === btn);
       state.range = btn.dataset.range;
       customRangeRow.style.display = state.range === 'custom' ? 'flex' : 'none';
       if (state.range === 'custom' && !state.customStart) {
@@ -179,8 +178,7 @@
 
   metricButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      metricButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(metricButtons, (b) => b === btn);
       state.metric = btn.dataset.metric;
       updateURL();
       if (state.lastResults) renderChart(state.lastResults.results);
@@ -189,8 +187,7 @@
 
   currencyButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      currencyButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(currencyButtons, (b) => b === btn);
       state.currency = btn.dataset.currency;
       savePref('currency', state.currency);
       updateURL();
@@ -247,7 +244,7 @@
     const range = params.get('range') || prefs.range;
     if (range) {
       state.range = range;
-      rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
+      setActiveButton(rangeButtons, (b) => b.dataset.range === range);
     }
 
     if (state.range === 'custom') {
@@ -261,13 +258,13 @@
     const metric = params.get('metric');
     if (metric && METRIC_LABELS[metric]) {
       state.metric = metric;
-      metricButtons.forEach((b) => b.classList.toggle('active', b.dataset.metric === metric));
+      setActiveButton(metricButtons, (b) => b.dataset.metric === metric);
     }
 
     const currency = params.get('currency') || prefs.currency;
     if (currency === 'CAD' || currency === 'USD') {
       state.currency = currency;
-      currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
+      setActiveButton(currencyButtons, (b) => b.dataset.currency === currency);
     }
 
     renderChips();

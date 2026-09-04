@@ -11,6 +11,30 @@
     lastResults: null,
   };
 
+  // Remembers the last metric/projection-horizon choice across visits (a
+  // URL param, when present, always wins) -- same pattern as the ETF
+  // Comparison tool's range/currency prefs. Deliberately does NOT persist
+  // the purchase date: it's tied to a specific hypothetical purchase, not a
+  // display preference, and the dynamic "5 years back from today" default
+  // (see restoreFromURL) stays fresh in a way a frozen saved date wouldn't.
+  const PREFS_KEY = 'yieldOnCostPrefs';
+  function loadPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+  function savePref(key, value) {
+    try {
+      const prefs = loadPrefs();
+      prefs[key] = value;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (e) {
+      // localStorage unavailable (private browsing, etc.) -- preference just won't persist
+    }
+  }
+
   const tickerInput = document.getElementById('tickerInput');
   const addTickerBtn = document.getElementById('addTickerBtn');
   const chipsContainer = document.getElementById('chipsContainer');
@@ -18,6 +42,7 @@
   const projectYearsInput = document.getElementById('projectYearsInput');
   const calcBtn = document.getElementById('calcBtn');
   const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
   const statusLine = document.getElementById('statusLine');
   const resultsSection = document.getElementById('resultsSection');
   const resultsTableBody = document.getElementById('resultsTableBody');
@@ -146,15 +171,16 @@
     const parsed = Number(projectYearsInput.value);
     state.projectYears = Math.min(30, Math.max(1, Math.round(Number.isFinite(parsed) ? parsed : 15)));
     projectYearsInput.value = state.projectYears;
+    savePref('projectYears', state.projectYears);
     updateURL();
     if (state.lastResults && state.tickers.length) runCalculate();
   });
 
   metricButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      metricButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(metricButtons, (b) => b === btn);
       state.metric = btn.dataset.metric;
+      savePref('metric', state.metric);
       updateURL();
       if (state.lastResults) renderChart(state.lastResults.results);
     });
@@ -172,9 +198,108 @@
     });
   }
 
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', downloadCSV);
+  }
+
   window.addEventListener('themechange', () => {
     if (state.lastResults) renderChart(state.lastResults.results);
   });
+
+  // ---------- CSV export ----------
+  // One export section per data series (yield-on-cost curve, yield-at-
+  // today's-price curve, projection) rather than one flat table, since each
+  // series has a different natural x-axis (a shared calendar-date axis for
+  // the two curves, a "years out" axis for the projection) and different
+  // tickers can have different amounts of history -- flattening them into a
+  // single table would mean either misaligned rows or a lot of blank cells.
+  function downloadCSV() {
+    const data = state.lastResults;
+    if (!data) return;
+    const symbols = state.tickers.filter((s) => data.results[s]);
+    const lines = [];
+    lines.push('Northbeam Finance - Yield on Cost Export');
+    lines.push(`Purchase date requested,${state.purchaseDate}`);
+    lines.push(`Project trend forward,${state.projectYears} years`);
+    lines.push('');
+
+    lines.push('Symbol,Purchase Price,Purchase Date Used,Currency,Current Yield on Cost,Current Yield at Today\'s Price,Payout Trend,Trend Rate (%/yr)');
+    symbols.forEach((sym) => {
+      const r = data.results[sym];
+      const trendLabel = r.trend.suspended
+        ? 'Distribution suspended'
+        : r.trend.insufficientData
+          ? (r.trend.reason === 'no-dividends' ? 'No dividend history' : 'Not enough history yet')
+          : r.trend.classification;
+      const trendRate = !r.trend.insufficientData && !r.trend.suspended ? (r.trend.annualGrowthRate * 100).toFixed(2) : '';
+      lines.push([
+        sym,
+        r.purchasePrice.toFixed(2),
+        toISODate(r.purchaseDate),
+        r.currency || '',
+        r.currentYOC != null ? (r.currentYOC * 100).toFixed(2) + '%' : '',
+        r.currentYield != null ? (r.currentYield * 100).toFixed(2) + '%' : '',
+        trendLabel,
+        trendRate,
+      ].join(','));
+    });
+    lines.push('');
+
+    const curveSymbols = symbols.filter((s) => data.results[s].yocCurve.length > 0);
+    if (curveSymbols.length > 0) {
+      const dateSet = new Set();
+      curveSymbols.forEach((s) => data.results[s].yocCurve.forEach((p) => dateSet.add(p.date)));
+      const dates = Array.from(dateSet).sort((a, b) => a - b);
+
+      lines.push('Yield on Cost (%)');
+      lines.push(['Date', ...curveSymbols].join(','));
+      dates.forEach((d) => {
+        const row = [toISODate(d)];
+        curveSymbols.forEach((s) => {
+          const p = data.results[s].yocCurve.find((pt) => pt.date === d);
+          row.push(p ? (p.yoc * 100).toFixed(2) : '');
+        });
+        lines.push(row.join(','));
+      });
+      lines.push('');
+
+      lines.push("Yield at Today's Price (%)");
+      lines.push(['Date', ...curveSymbols].join(','));
+      dates.forEach((d) => {
+        const row = [toISODate(d)];
+        curveSymbols.forEach((s) => {
+          const p = data.results[s].yocCurve.find((pt) => pt.date === d);
+          row.push(p && p.currentYield != null ? (p.currentYield * 100).toFixed(2) : '');
+        });
+        lines.push(row.join(','));
+      });
+      lines.push('');
+    }
+
+    const projSymbols = symbols.filter((s) => data.results[s].projection.length > 0);
+    if (projSymbols.length > 0) {
+      lines.push('Projected Yield on Cost (%) - assuming each fund\'s historical payout trend continues');
+      lines.push(['Years Out', ...projSymbols].join(','));
+      for (let y = 1; y <= state.projectYears; y++) {
+        const row = [y];
+        projSymbols.forEach((s) => {
+          const p = data.results[s].projection.find((pt) => pt.yearsOut === y);
+          row.push(p ? (p.projectedYOC * 100).toFixed(2) : '');
+        });
+        lines.push(row.join(','));
+      }
+    }
+
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `northbeam-yield-on-cost-${toISODate(Date.now())}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   // ---------- shareable URL ----------
   function updateURL() {
@@ -198,19 +323,22 @@
 
     // Default to 5 years back -- long enough to usually show a real trend
     // without requiring the user to pick a date before doing anything.
+    // Not saved as a preference (see PREFS_KEY note above): this is
+    // recomputed fresh from today's date every visit rather than frozen.
     const defaultPurchase = toISODate(Date.now() - 5 * YEAR_MS);
     state.purchaseDate = params.get('purchaseDate') || defaultPurchase;
     purchaseDateInput.value = state.purchaseDate;
     purchaseDateInput.max = toISODate(Date.now());
 
-    const projectYears = Number(params.get('projectYears'));
+    const prefs = loadPrefs();
+    const projectYears = Number(params.get('projectYears') ?? prefs.projectYears);
     if (projectYears >= 1 && projectYears <= 30) state.projectYears = Math.round(projectYears);
     projectYearsInput.value = state.projectYears;
 
-    const metric = params.get('metric');
+    const metric = params.get('metric') || prefs.metric;
     if (metric === 'currentYield') {
       state.metric = metric;
-      metricButtons.forEach((b) => b.classList.toggle('active', b.dataset.metric === metric));
+      setActiveButton(metricButtons, (b) => b.dataset.metric === metric);
     }
 
     renderChips();
@@ -233,6 +361,7 @@
 
       state.lastResults = data;
       resultsSection.style.display = 'block';
+      if (exportCsvBtn) exportCsvBtn.style.display = 'inline-block';
       projectedHeader.textContent = `Projected Yield on Cost (${state.projectYears}yr)`;
 
       const problems = data.fetchErrors && Object.keys(data.fetchErrors).length

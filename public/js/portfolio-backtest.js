@@ -231,8 +231,7 @@
 
   rangeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      rangeButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(rangeButtons, (b) => b === btn);
       state.range = btn.dataset.range;
       customRangeRow.style.display = state.range === 'custom' ? 'flex' : 'none';
       if (state.range === 'custom' && !state.customStart) {
@@ -288,8 +287,7 @@
 
   currencyButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      currencyButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(currencyButtons, (b) => b === btn);
       state.currency = btn.dataset.currency;
       savePref('currency', state.currency);
       updateURL();
@@ -299,8 +297,7 @@
 
   dollarModeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      dollarModeButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(dollarModeButtons, (b) => b === btn);
       state.dollarMode = btn.dataset.dollarMode;
       savePref('dollarMode', state.dollarMode);
       updateURL();
@@ -339,8 +336,7 @@
 
   withdrawalModeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      withdrawalModeButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(withdrawalModeButtons, (b) => b === btn);
       state.withdrawalMode = btn.dataset.withdrawalMode;
       updateWithdrawalModeUI();
       updateURL();
@@ -500,7 +496,7 @@
     const range = params.get('range') || prefs.range;
     if (range) {
       state.range = range;
-      rangeButtons.forEach((b) => b.classList.toggle('active', b.dataset.range === range));
+      setActiveButton(rangeButtons, (b) => b.dataset.range === range);
     }
     if (state.range === 'custom') {
       const start = params.get('start');
@@ -513,13 +509,13 @@
     const currency = params.get('currency') || prefs.currency;
     if (currency === 'CAD' || currency === 'USD') {
       state.currency = currency;
-      currencyButtons.forEach((b) => b.classList.toggle('active', b.dataset.currency === currency));
+      setActiveButton(currencyButtons, (b) => b.dataset.currency === currency);
     }
 
     const dollarMode = params.get('dollarMode') || prefs.dollarMode;
     if (dollarMode === 'real') {
       state.dollarMode = 'real';
-      dollarModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.dollarMode === 'real'));
+      setActiveButton(dollarModeButtons, (b) => b.dataset.dollarMode === 'real');
     }
 
     const REBALANCE_VALUES = new Set(['none', 'monthly', 'quarterly', 'semiannual', 'annually']);
@@ -550,7 +546,7 @@
       const withdrawalMode = params.get('withdrawalMode');
       if (withdrawalMode === 'dynamic' || withdrawalMode === 'fixed') {
         state.withdrawalMode = withdrawalMode;
-        withdrawalModeButtons.forEach((b) => b.classList.toggle('active', b.dataset.withdrawalMode === withdrawalMode));
+        setActiveButton(withdrawalModeButtons, (b) => b.dataset.withdrawalMode === withdrawalMode);
       }
     }
     updateWithdrawalModeUI();

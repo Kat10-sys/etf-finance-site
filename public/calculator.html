@@ -45,16 +45,16 @@
 
       <div class="range-row">
         <div class="range-buttons">
-          <button class="range-btn" data-range="1w">1 Week</button>
-          <button class="range-btn" data-range="1mo">1 Month</button>
-          <button class="range-btn" data-range="3mo">3 Months</button>
-          <button class="range-btn" data-range="6mo">6 Months</button>
-          <button class="range-btn" data-range="ytd">YTD</button>
-          <button class="range-btn" data-range="1y">1 Year</button>
-          <button class="range-btn" data-range="3y">3 Years</button>
-          <button class="range-btn" data-range="5y">5 Years</button>
-          <button class="range-btn active" data-range="max-common">Max Common</button>
-          <button class="range-btn" data-range="custom">Custom</button>
+          <button class="range-btn" data-range="1w" aria-pressed="false">1 Week</button>
+          <button class="range-btn" data-range="1mo" aria-pressed="false">1 Month</button>
+          <button class="range-btn" data-range="3mo" aria-pressed="false">3 Months</button>
+          <button class="range-btn" data-range="6mo" aria-pressed="false">6 Months</button>
+          <button class="range-btn" data-range="ytd" aria-pressed="false">YTD</button>
+          <button class="range-btn" data-range="1y" aria-pressed="false">1 Year</button>
+          <button class="range-btn" data-range="3y" aria-pressed="false">3 Years</button>
+          <button class="range-btn" data-range="5y" aria-pressed="false">5 Years</button>
+          <button class="range-btn active" data-range="max-common" aria-pressed="true">Max Common</button>
+          <button class="range-btn" data-range="custom" aria-pressed="false">Custom</button>
         </div>
         <div class="range-meta" id="rangeMeta"></div>
       </div>
@@ -67,9 +67,9 @@
       <div class="currency-row">
         <span class="currency-label">Show in:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-currency="native">Native</button>
-          <button class="currency-btn" data-currency="CAD">CAD</button>
-          <button class="currency-btn" data-currency="USD">USD</button>
+          <button class="currency-btn active" data-currency="native" aria-pressed="true">Native</button>
+          <button class="currency-btn" data-currency="CAD" aria-pressed="false">CAD</button>
+          <button class="currency-btn" data-currency="USD" aria-pressed="false">USD</button>
         </div>
       </div>
 
@@ -83,9 +83,9 @@
     <div id="resultsSection">
       <div class="panel chart-card">
         <div class="metric-buttons" id="metricButtons">
-          <button class="metric-btn" data-metric="priceReturn">Price Return</button>
-          <button class="metric-btn" data-metric="dividendPlusCash">Dividend + Cash</button>
-          <button class="metric-btn active" data-metric="totalReturnDRIP">Total Return (DRIP)</button>
+          <button class="metric-btn" data-metric="priceReturn" aria-pressed="false">Price Return</button>
+          <button class="metric-btn" data-metric="dividendPlusCash" aria-pressed="false">Dividend + Cash</button>
+          <button class="metric-btn active" data-metric="totalReturnDRIP" aria-pressed="true">Total Return (DRIP)</button>
         </div>
         <div class="chart-wrap"><canvas id="returnChart"></canvas></div>
       </div>
@@ -125,6 +125,7 @@
   <script src="/js/nav-toggle.js"></script>
   <script src="/js/term-info.js"></script>
   <script src="/js/ticker-autocomplete.js"></script>
+  <script src="/js/aria-toggle.js"></script>
   <script src="/js/calculator.js"></script>
 </body>
 </html>

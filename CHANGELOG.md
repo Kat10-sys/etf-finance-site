@@ -38,6 +38,44 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-04
 
+- **Added accessibility and quality-of-life improvements for the new Yield
+  on Cost tool, plus a site-wide `aria-pressed` fix.** Three changes:
+  - **`aria-pressed` on every toggle-button group site-wide**
+    (`public/js/aria-toggle.js`, a new shared helper): range/metric/
+    currency/dollar-mode/withdrawal-mode buttons across ETF Comparison,
+    Growth Calculator, Portfolio Backtest, and Yield on Cost were visually
+    styled active/inactive but exposed no state to assistive tech — a
+    screen reader just heard several identically-behaving buttons with no
+    indication which was selected. `setActiveButton(buttons, predicate)`
+    now keeps `aria-pressed` in sync with the `active` CSS class everywhere
+    a button group is set, both on click and on state restored from a URL;
+    every button's initial HTML also got a matching `aria-pressed` so the
+    static markup is correct even before JS runs. Verified via the live
+    DOM (not just visual inspection) that every group's `aria-pressed`
+    values flip correctly on click, in `calculator.js`, `growth-
+    calculator.js`, `portfolio-backtest.js` (all 4 of its button groups),
+    and `yield-on-cost.js`.
+  - **Remembered metric/projection-horizon preference for Yield on Cost**
+    (`yield-on-cost.js`) — same `localStorage` pattern as ETF Comparison's
+    range/currency prefs (`PREFS_KEY`/`loadPrefs`/`savePref`), used as the
+    fallback when no URL param is present. Deliberately does *not* persist
+    the purchase date: that's tied to a specific hypothetical purchase, not
+    a display preference, and the existing "5 years back from today"
+    default recomputes fresh each visit rather than going stale the way a
+    frozen saved date would.
+  - **CSV export for Yield on Cost** (`downloadCSV()` in `yield-on-cost.js`,
+    new "Export CSV" button) — matches Portfolio Backtest's existing export
+    button/pattern (Blob + object-URL + temporary anchor). Exports a
+    metadata block, a per-symbol summary row (purchase price/date, current
+    YOC, current yield, payout trend), then the yield-on-cost curve, the
+    yield-at-today's-price curve, and the projection as separate tables
+    (each series has its own natural x-axis — calendar dates for the two
+    curves, years-out for the projection — so flattening them into one
+    table would mean misaligned rows). Verified by intercepting the actual
+    `Blob` the live button produces (not a reimplementation) against real
+    HEQL.TO/QYLD data — content matches the on-page table and chart
+    exactly.
+
 - **Stress-tested the new Yield on Cost tool and fixed two bugs it found** —
   (1) a pure-logic reimplementation of `computeDividendTrend`/`buildYocCurve`
   run against 20 synthetic dividend histories (steadily growing/declining/

@@ -51,11 +51,11 @@
 
       <div class="range-row">
         <div class="range-buttons">
-          <button class="range-btn" data-range="1y">1 Year</button>
-          <button class="range-btn" data-range="3y">3 Years</button>
-          <button class="range-btn" data-range="5y">5 Years</button>
-          <button class="range-btn active" data-range="max-common">Max Common</button>
-          <button class="range-btn" data-range="custom">Custom</button>
+          <button class="range-btn" data-range="1y" aria-pressed="false">1 Year</button>
+          <button class="range-btn" data-range="3y" aria-pressed="false">3 Years</button>
+          <button class="range-btn" data-range="5y" aria-pressed="false">5 Years</button>
+          <button class="range-btn active" data-range="max-common" aria-pressed="true">Max Common</button>
+          <button class="range-btn" data-range="custom" aria-pressed="false">Custom</button>
         </div>
         <div class="range-meta" id="rangeMeta"></div>
       </div>
@@ -91,8 +91,8 @@
       <div class="currency-row" id="withdrawalModeRow" style="display:none">
         <span class="currency-label">Withdrawal strategy:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-withdrawal-mode="fixed">Fixed, % of balance at retirement</button>
-          <button class="currency-btn" data-withdrawal-mode="dynamic">Dynamic, % of current value</button>
+          <button class="currency-btn active" data-withdrawal-mode="fixed" aria-pressed="true">Fixed, % of balance at retirement</button>
+          <button class="currency-btn" data-withdrawal-mode="dynamic" aria-pressed="false">Dynamic, % of current value</button>
         </div>
       </div>
 
@@ -145,16 +145,16 @@
       <div class="currency-row">
         <span class="currency-label">Show in:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-currency="CAD">CAD</button>
-          <button class="currency-btn" data-currency="USD">USD</button>
+          <button class="currency-btn active" data-currency="CAD" aria-pressed="true">CAD</button>
+          <button class="currency-btn" data-currency="USD" aria-pressed="false">USD</button>
         </div>
       </div>
 
       <div class="currency-row">
         <span class="currency-label">Adjust for inflation:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-dollar-mode="nominal">Nominal dollars</button>
-          <button class="currency-btn" data-dollar-mode="real">Real (today's dollars)</button>
+          <button class="currency-btn active" data-dollar-mode="nominal" aria-pressed="true">Nominal dollars</button>
+          <button class="currency-btn" data-dollar-mode="real" aria-pressed="false">Real (today's dollars)</button>
         </div>
       </div>
       <div class="hint">"Real" restates every figure in today's purchasing power<button class="term-info-btn" data-term="today-dollars" aria-label="What does today's dollars mean?" aria-expanded="false" type="button">i</button> using actual historical CPI<button class="term-info-btn" data-term="cpi" aria-label="What does CPI mean?" aria-expanded="false" type="button">i</button> (US or Canada, matching the currency above) — not a projection or assumed rate.</div>
@@ -254,6 +254,7 @@
   <script src="/js/term-info.js"></script>
   <script src="/js/currency-input.js"></script>
   <script src="/js/ticker-autocomplete.js"></script>
+  <script src="/js/aria-toggle.js"></script>
   <script src="/js/portfolio-backtest.js"></script>
 </body>
 </html>

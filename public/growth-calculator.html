@@ -75,8 +75,8 @@
       <div class="currency-row">
         <span class="currency-label">Show results in:</span>
         <div class="currency-buttons">
-          <button class="currency-btn active" data-mode="nominal">Future dollars</button>
-          <button class="currency-btn" data-mode="real">Today's dollars</button>
+          <button class="currency-btn active" data-mode="nominal" aria-pressed="true">Future dollars</button>
+          <button class="currency-btn" data-mode="real" aria-pressed="false">Today's dollars</button>
         </div>
         <button class="term-info-btn" data-term="today-dollars" aria-label="What does today's dollars mean?" aria-expanded="false" type="button">i</button>
       </div>
@@ -147,6 +147,7 @@
   <script src="/js/nav-toggle.js"></script>
   <script src="/js/term-info.js"></script>
   <script src="/js/currency-input.js"></script>
+  <script src="/js/aria-toggle.js"></script>
   <script src="/js/growth-calculator.js"></script>
 </body>
 </html>

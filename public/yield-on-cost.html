@@ -57,6 +57,7 @@
       <div class="action-row">
         <button class="btn" id="calcBtn" disabled>Calculate</button>
         <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
+        <button class="btn secondary" id="exportCsvBtn" style="display:none">Export CSV</button>
       </div>
       <div class="status-line" id="statusLine" aria-live="polite" aria-atomic="true"></div>
     </div>
@@ -64,8 +65,8 @@
     <div id="resultsSection" style="display:none">
       <div class="panel chart-card">
         <div class="metric-buttons" id="metricButtons">
-          <button class="metric-btn active" data-metric="yoc">Yield on Cost</button>
-          <button class="metric-btn" data-metric="currentYield">Yield at Today's Price</button>
+          <button class="metric-btn active" data-metric="yoc" aria-pressed="true">Yield on Cost</button>
+          <button class="metric-btn" data-metric="currentYield" aria-pressed="false">Yield at Today's Price</button>
         </div>
         <div class="chart-wrap"><canvas id="yocChart"></canvas></div>
         <div class="hint" style="margin-top:10px">Solid lines are actual history; dashed lines are a projection assuming each fund's historical payout trend continues — not a guarantee.</div>
@@ -101,6 +102,7 @@
   <script src="/js/nav-toggle.js"></script>
   <script src="/js/term-info.js"></script>
   <script src="/js/ticker-autocomplete.js"></script>
+  <script src="/js/aria-toggle.js"></script>
   <script src="/js/yield-on-cost.js"></script>
 </body>
 </html>

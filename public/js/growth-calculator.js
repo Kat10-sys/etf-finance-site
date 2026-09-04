@@ -284,8 +284,7 @@
 
   modeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      modeButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      setActiveButton(modeButtons, (b) => b === btn);
       displayMode = btn.dataset.mode;
       render();
     });
