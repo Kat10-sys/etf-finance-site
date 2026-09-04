@@ -1690,6 +1690,241 @@ app.get('/api/ticker-search', async (req, res) => {
   }
 });
 
+// ---------- Yield on Cost ----------
+
+// A trailing-12-month dividend total needs a full year of data behind it to
+// mean anything -- right after a hypothetical purchase date there's only a
+// partial year of distributions to sum, which understates the true rate.
+// Both the yield-on-cost curve and the trend regression below withhold any
+// point until a full year has actually elapsed, rather than show a
+// misleadingly low starting value (same reasoning as MIN_CAGR_YEARS /
+// MIN_ANNUALIZE_DAYS elsewhere in this file).
+const YEAR_MS = 365 * DAY_MS;
+
+// Below this many years of trailing-12-month dividend samples, a log-linear
+// regression on the payout trend is too noisy to call "growing" or
+// "declining" with any confidence -- two or three data points can trace a
+// steep-looking line in either direction by pure chance.
+const MIN_YOC_TREND_YEARS = 2;
+
+function trailingDividendAt(dividends, ts) {
+  let sum = 0;
+  for (const d of dividends) {
+    if (d.date > ts - YEAR_MS && d.date <= ts) sum += d.amount;
+  }
+  return sum;
+}
+
+function addMonthsUTC(ts, n) {
+  const d = new Date(ts);
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.getTime();
+}
+
+function makeYocPoint(series, dividends, t, purchasePrice) {
+  const priceNow = findOnOrBefore(series, t)?.close ?? null;
+  const trailingDividend = trailingDividendAt(dividends, t);
+  return {
+    date: t,
+    trailingDividend,
+    yoc: trailingDividend / purchasePrice,
+    currentYield: priceNow ? trailingDividend / priceNow : null,
+  };
+}
+
+// Builds the actual yield-on-cost curve for one hypothetical purchase: the
+// x-axis starts a full year after the purchase date (see YEAR_MS note above)
+// and steps monthly to the latest available price, dividing each point's
+// trailing-12-month distribution total by the fixed purchase price. Empty
+// if less than a year has elapsed since the purchase date.
+function buildYocCurve(history, purchaseTs, purchasePrice) {
+  const { series, dividends } = history;
+  const latestDate = series[series.length - 1].date;
+  const start = purchaseTs + YEAR_MS;
+  if (start > latestDate) return [];
+
+  const points = [];
+  let t = start;
+  while (t < latestDate) {
+    points.push(makeYocPoint(series, dividends, t, purchasePrice));
+    t = addMonthsUTC(t, 1);
+  }
+  points.push(makeYocPoint(series, dividends, latestDate, purchasePrice));
+  return points;
+}
+
+// Assesses whether a fund's per-share payout has been growing or shrinking,
+// independent of any hypothetical purchase date -- this is a property of the
+// fund's own distribution history, not of when a particular investor bought
+// in. Samples the trailing-12-month dividend total quarterly across the
+// fund's full available history and fits a log-linear regression: the sign
+// and size of the slope says whether the payout compounds up or down over
+// time, which is exactly the distinction (e.g. a fund like HEQL.TO whose
+// distributions have grown, vs. one like BIGY.TO whose have shrunk) this
+// tool exists to surface.
+function computeDividendTrend(history) {
+  const { series, dividends } = history;
+  if (dividends.length === 0) return { insufficientData: true, reason: 'no-dividends' };
+
+  const latestDate = series[series.length - 1].date;
+  const start = dividends[0].date + YEAR_MS;
+  if (start > latestDate) return { insufficientData: true, reason: 'too-short' };
+
+  const samples = [];
+  let t = start;
+  while (t < latestDate) {
+    samples.push({ t, value: trailingDividendAt(dividends, t) });
+    t = addMonthsUTC(t, 3);
+  }
+  samples.push({ t: latestDate, value: trailingDividendAt(dividends, latestDate) });
+
+  const spanYears = (samples[samples.length - 1].t - samples[0].t) / YEAR_MS;
+  const latestValue = samples[samples.length - 1].value;
+
+  // A currently-zero trailing distribution (suspended payout) breaks the log
+  // regression below (ln(0) is undefined) and is itself the headline fact --
+  // report it directly rather than fitting a trend line to it.
+  if (latestValue <= 0) return { insufficientData: false, suspended: true, spanYears };
+  if (spanYears < MIN_YOC_TREND_YEARS) return { insufficientData: true, reason: 'too-short', spanYears };
+
+  const positiveSamples = samples.filter((s) => s.value > 0);
+  if (positiveSamples.length < 4) return { insufficientData: true, reason: 'too-short', spanYears };
+
+  // Ordinary least squares on ln(value) vs. years-since-first-sample: the
+  // slope is the continuously-compounded growth rate of the payout.
+  const t0 = positiveSamples[0].t;
+  const xs = positiveSamples.map((s) => (s.t - t0) / YEAR_MS);
+  const ys = positiveSamples.map((s) => Math.log(s.value));
+  const n = xs.length;
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (ys[i] - meanY);
+    den += (xs[i] - meanX) ** 2;
+  }
+  const slope = den > 0 ? num / den : 0;
+  const annualGrowthRate = Math.exp(slope) - 1;
+
+  let classification;
+  if (annualGrowthRate > 0.01) classification = 'growing';
+  else if (annualGrowthRate < -0.01) classification = 'declining';
+  else classification = 'flat';
+
+  return { insufficientData: false, suspended: false, spanYears, annualGrowthRate, classification, latestTrailingDividend: latestValue };
+}
+
+// Computes the full yield-on-cost payload for one symbol. Pulled out of the
+// route handler so the route can fetch/compute several tickers in parallel
+// (e.g. comparing a fund with a growing payout against one with a shrinking
+// one side by side), the same shape /api/compare uses for multi-ticker
+// requests.
+async function computeYieldOnCostForSymbol(symbol, purchaseDateRaw, requestedPurchaseTs, projectYears) {
+  const history = await fetchHistory(symbol); // throws on fetch failure -- caller catches per-symbol
+
+  const earliestAvailable = history.series[0].date;
+  // A purchase date before the earliest available price data can't be
+  // priced -- fall back to the earliest available date (same pattern as
+  // the ETF Comparison tool's "max common" range) rather than erroring
+  // outright, and say so via purchaseDateNote.
+  let purchaseTs = requestedPurchaseTs;
+  let purchaseDateNote = null;
+  if (requestedPurchaseTs < earliestAvailable) {
+    purchaseTs = earliestAvailable;
+    purchaseDateNote = `No price history for ${symbol} before ${new Date(earliestAvailable).toISOString().slice(0, 10)} -- using that as the purchase date instead.`;
+  }
+
+  // "On or before" (not "on or after"): a weekend/holiday purchase date
+  // uses the last known close going into it, same convention as
+  // priceOnOrBefore in the backtest routes. purchaseTs >= earliestAvailable
+  // by construction above, so this always matches at least series[0].
+  const purchasePoint = findOnOrBefore(history.series, purchaseTs);
+  purchaseTs = purchasePoint.date;
+  const purchasePrice = purchasePoint.close;
+
+  const yocCurve = buildYocCurve(history, purchaseTs, purchasePrice);
+  const trend = computeDividendTrend(history);
+
+  const latestPoint = yocCurve[yocCurve.length - 1] || null;
+  const projection = [];
+  if (latestPoint && !trend.insufficientData && !trend.suspended) {
+    for (let yearsOut = 1; yearsOut <= projectYears; yearsOut++) {
+      const projectedTrailingDividend = latestPoint.trailingDividend * Math.pow(1 + trend.annualGrowthRate, yearsOut);
+      projection.push({
+        yearsOut,
+        projectedTrailingDividend,
+        projectedYOC: projectedTrailingDividend / purchasePrice,
+      });
+    }
+  }
+
+  return {
+    symbol,
+    name: history.longName,
+    currency: history.currency,
+    exchange: history.fullExchangeName,
+    earliestAvailable,
+    dataGapNote: history.dataGapNote,
+    purchaseDate: purchaseTs,
+    purchaseDateNote,
+    purchasePrice,
+    yocCurve,
+    currentYOC: latestPoint ? latestPoint.yoc : null,
+    currentYield: latestPoint ? latestPoint.currentYield : null,
+    currentTrailingDividend: latestPoint ? latestPoint.trailingDividend : null,
+    trend,
+    projection,
+    projectYears,
+  };
+}
+
+app.get('/api/yield-on-cost', async (req, res) => {
+  try {
+    const symbolsRaw = String(req.query.symbols || req.query.symbol || '')
+      .split(',')
+      .map((s) => normalizeSymbol(s))
+      .filter(isValidTickerFormat);
+    if (symbolsRaw.length === 0) return res.status(400).json({ error: 'Provide at least one symbol.' });
+    if (symbolsRaw.length > 4) return res.status(400).json({ error: 'Maximum 4 symbols at a time.' });
+
+    const purchaseDateRaw = String(req.query.purchaseDate || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDateRaw)) {
+      return res.status(400).json({ error: 'Provide a valid purchase date (YYYY-MM-DD).' });
+    }
+    const requestedPurchaseTs = new Date(`${purchaseDateRaw}T00:00:00Z`).getTime();
+    if (Number.isNaN(requestedPurchaseTs)) {
+      return res.status(400).json({ error: 'Provide a valid purchase date (YYYY-MM-DD).' });
+    }
+    if (requestedPurchaseTs > Date.now()) {
+      return res.status(400).json({ error: 'Purchase date cannot be in the future.' });
+    }
+
+    const projectYears = Math.min(30, Math.max(1, Math.round(Number(req.query.projectYears) || 15)));
+
+    const results = {};
+    const fetchErrors = {};
+    await Promise.all(
+      symbolsRaw.map(async (sym) => {
+        try {
+          results[sym] = await computeYieldOnCostForSymbol(sym, purchaseDateRaw, requestedPurchaseTs, projectYears);
+        } catch (e) {
+          fetchErrors[sym] = e.message;
+        }
+      })
+    );
+
+    if (Object.keys(results).length === 0) {
+      return res.status(404).json({ error: 'No valid tickers found.', fetchErrors });
+    }
+
+    res.json({ purchaseDateRequested: requestedPurchaseTs, projectYears, results, fetchErrors });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 function classifyRegionByName(name) {
   const n = String(name || '').toLowerCase();
   if (/(emerging)/.test(n)) return 'Emerging Markets';

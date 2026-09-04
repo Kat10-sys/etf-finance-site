@@ -27,6 +27,9 @@
     carryforward: 'Contribution room from past years that you didn’t use, which rolls forward and stays available until you use it — both TFSA and RRSP work this way.',
     'pension-adjustment': 'An amount reported by your employer if you belong to a workplace pension plan. It reduces your RRSP room since you’re already building retirement savings through work.',
     'deduction-limit': 'The CRA’s official cap on how much of your RRSP contributions you’re allowed to deduct from your taxable income for the year.',
+    'yield-on-cost': 'The most recent 12 months of dividends divided by the price you originally paid — not today’s price. If a fund’s payout grows over time, your yield on cost rises even if the share price barely moves.',
+    'current-yield': 'The most recent 12 months of dividends divided by today’s price — the yield a new buyer would get right now, for comparison against your own yield on cost.',
+    'payout-trend': 'Whether a fund’s per-share dividend has been growing or shrinking over its available history, fitted from the trailing 12-month distribution total sampled every quarter — not a prediction, just what the historical trend has actually been.',
   };
 
   // Small helper other page scripts can call when building dynamic HTML

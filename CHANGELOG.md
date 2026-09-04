@@ -36,6 +36,51 @@ scratch. It also gives future work a place to land before it's built.
 
 ---
 
+## 2026-09-04
+
+- **Added a new Yield on Cost tool** (`public/yield-on-cost.html`,
+  `public/js/yield-on-cost.js`, `/api/yield-on-cost` in `server.js`) — user
+  wanted to see a fund's dividend yield relative to their original purchase
+  price over time, and whether a fund's payout has historically been
+  growing or shrinking (e.g. HEQL.TO vs. a fund whose distributions have
+  been cut), with a simple forward projection if that trend continues.
+  Deliberately built entirely on data this app already pulls from Yahoo
+  (`fetchHistory`'s per-event dividend history, already merged with manual
+  issuer overrides and cached) rather than scraping a third-party site like
+  dividendhistory.org, since that data was already flowing through a
+  pipeline the rest of the site trusts.
+  - `computeYieldOnCostForSymbol` computes, for a hypothetical purchase
+    date: the actual purchase price (`findOnOrBefore`, same "snap to last
+    known close" convention as `priceOnOrBefore` elsewhere), a monthly
+    yield-on-cost curve (trailing-12-month dividend total ÷ fixed purchase
+    price), and the same trailing dividend divided by *today's* price at
+    each point for comparison.
+  - `computeDividendTrend` separately assesses whether the fund's own
+    per-share payout has been growing or shrinking, independent of any
+    particular purchase date: samples the trailing-12-month distribution
+    quarterly across the fund's full available history and fits a
+    log-linear (OLS on ln(value) vs. years) regression; the slope's sign
+    and size is the annualized payout growth/decline rate.
+  - Two safeguards, mirroring the short-window annualization threshold
+    already established for Portfolio Backtest and ETF Comparison earlier
+    this week: (1) the yield-on-cost curve withholds any point until a
+    full year has actually elapsed since purchase (`YEAR_MS`), since a
+    partial year's dividend total understates the true rate; (2) the trend
+    regression requires at least `MIN_YOC_TREND_YEARS = 2` years of
+    quarterly samples before calling a trend "growing"/"declining", and
+    handles a currently-suspended distribution (latest trailing total ≤ 0)
+    as its own explicit case rather than feeding a zero into `ln()`.
+  - The route accepts up to 4 comma-separated symbols per request (same
+    `Promise.all` + per-symbol `fetchErrors` pattern as `/api/compare`) so
+    a user can chart a growing-payout fund against a shrinking one
+    side-by-side, e.g. `?symbols=HEQL.TO,QYLD`.
+  - Verified against real data: HEQL.TO (inception Oct 2023) correctly
+    shows "not enough dividend history yet" for the trend regression
+    (only ~1.85 years available) while still showing a real yield-on-cost
+    curve; QYLD (11+ years of history) computes a real trend and 10-year
+    projection; BIGY.TO (inception Sept 2025) correctly shows an empty
+    curve since under a year has elapsed since any possible purchase date.
+
 ## 2026-09-03
 
 - **Clarified the Max Drawdown tooltip to explain why it differs from

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<title>Yield on Cost Calculator — Northbeam Finance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="brand">Northbeam <span>Finance</span></a>
+      <div class="nav-right">
+        <div class="nav-links" id="navLinks">
+          <a href="/">Home</a>
+          <a href="/calculator.html">ETF Comparison</a>
+          <a href="/growth-calculator.html">Growth Calculator</a>
+          <a href="/contribution-calculator.html">Contribution Room</a>
+          <a href="/portfolio-backtest.html">Portfolio Backtest</a>
+          <a href="/yield-on-cost.html" class="active">Yield on Cost</a>
+        </div>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Yield on Cost Calculator</h1>
+      <p>See how a fund's dividend yield relative to your original purchase price has changed over time, and whether its payout history has been growing or shrinking. Add up to 4 tickers to compare, e.g. a fund with a rising payout against one with a falling payout.</p>
+    </div>
+
+    <div class="panel">
+      <div class="ticker-input-row">
+        <input id="tickerInput" type="text" placeholder="e.g. HEQL.TO" autocomplete="off" />
+        <button class="btn" id="addTickerBtn">Add</button>
+      </div>
+      <div class="hint">Leave off any suffix for US tickers. Use <strong>.TO</strong> for Toronto Stock Exchange, <strong>.NE</strong> for NEO / Cboe Canada. Up to 4 tickers.</div>
+      <div class="chips" id="chipsContainer"></div>
+
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Purchase date</span>
+          <input type="date" id="purchaseDateInput">
+        </label>
+        <label class="form-field">
+          <span>Project trend forward (years)</span>
+          <input type="number" id="projectYearsInput" value="15" min="1" max="30" step="1" inputmode="numeric">
+        </label>
+      </div>
+
+      <div class="action-row">
+        <button class="btn" id="calcBtn" disabled>Calculate</button>
+        <button class="btn secondary" id="copyLinkBtn">Copy Link</button>
+      </div>
+      <div class="status-line" id="statusLine" aria-live="polite" aria-atomic="true"></div>
+    </div>
+
+    <div id="resultsSection" style="display:none">
+      <div class="panel chart-card">
+        <div class="metric-buttons" id="metricButtons">
+          <button class="metric-btn active" data-metric="yoc">Yield on Cost</button>
+          <button class="metric-btn" data-metric="currentYield">Yield at Today's Price</button>
+        </div>
+        <div class="chart-wrap"><canvas id="yocChart"></canvas></div>
+        <div class="hint" style="margin-top:10px">Solid lines are actual history; dashed lines are a projection assuming each fund's historical payout trend continues — not a guarantee.</div>
+      </div>
+
+      <div class="panel">
+        <div class="table-scroll">
+          <table class="results-table" id="resultsTable">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Purchase Price</th>
+                <th>Yield on Cost<button class="term-info-btn" data-term="yield-on-cost" aria-label="What does Yield on Cost mean?" aria-expanded="false" type="button">i</button></th>
+                <th>Yield at Today's Price<button class="term-info-btn" data-term="current-yield" aria-label="What does Yield at Today's Price mean?" aria-expanded="false" type="button">i</button></th>
+                <th>Payout Trend<button class="term-info-btn" data-term="payout-trend" aria-label="What does Payout Trend mean?" aria-expanded="false" type="button">i</button></th>
+                <th id="projectedHeader">Projected Yield on Cost</th>
+              </tr>
+            </thead>
+            <tbody id="resultsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <strong>This page is a mathematical illustration, not investment advice.</strong> Figures are computed from actual historical price and dividend data. The projected trend extrapolates each fund's own past payout growth or decline forward at a constant rate — real distributions rarely grow at a perfectly steady rate, and a fund's history is no guarantee of its future payout. This does not account for taxes, fund expense ratios, or your personal financial situation. Nothing on this page recommends buying, selling, or holding any specific investment, and it is not tax, legal, or personalized financial advice. Consult a licensed financial advisor before making investment decisions.
+    </div>
+  </footer>
+
+  <script src="/js/theme-toggle.js"></script>
+  <script src="/js/nav-toggle.js"></script>
+  <script src="/js/term-info.js"></script>
+  <script src="/js/ticker-autocomplete.js"></script>
+  <script src="/js/yield-on-cost.js"></script>
+</body>
+</html>
