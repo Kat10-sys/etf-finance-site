@@ -514,6 +514,7 @@ table.results-table .symbol-inner {
   white-space: nowrap;
 }
 .link-btn:hover { text-decoration: underline; }
+.link-btn-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }

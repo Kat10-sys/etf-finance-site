@@ -38,6 +38,26 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-04
 
+- **Added a "→ Yield on Cost" cross-link from ETF Comparison**
+  (`public/js/calculator.js`), matching the existing "→ Growth Calc" link
+  pattern. Shown per-ticker in the results table's action column, stacked
+  with the Growth Calc link/fallback via a new `.link-btn-stack` CSS rule
+  (`style.css`) rather than a second table column. Gated on `r.dividendSum
+  > 0` for that ticker's comparison window -- a fund that paid no dividend
+  in the window would just show a flat 0% the whole way through on Yield
+  on Cost, so the link isn't offered for it (verified: SPY shows both
+  links, BRK-B -- which has never paid a dividend -- shows only Growth
+  Calc; a too-short window with no dividend event shows neither, just the
+  existing "Range too short" fallback). Passes `symbols=<ticker>` and
+  `purchaseDate=<the comparison window's own start date>` -- i.e. "what
+  would your yield on cost be if you'd bought at the start of the window
+  you were just looking at" -- via URL, which Yield on Cost's existing
+  `restoreFromURL` already consumes directly with no destination-side
+  changes needed. Unlike the Growth Calc link, no prefill-note banner was
+  added: the ticker chip and purchase-date field already make the origin
+  of the prefilled values self-evident, whereas Growth Calc's prefilled
+  *rate* is an opaque number without one.
+
 - **Added accessibility and quality-of-life improvements for the new Yield
   on Cost tool, plus a site-wide `aria-pressed` fix.** Three changes:
   - **`aria-pressed` on every toggle-button group site-wide**

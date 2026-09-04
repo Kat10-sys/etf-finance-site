@@ -441,16 +441,23 @@
         const windowDays = (r.endDate - r.startDate) / (24 * 60 * 60 * 1000);
         const isShortWindow = windowDays < 90;
         const cagrPct = r.totalReturnDRIPCAGR != null ? (r.totalReturnDRIPCAGR * 100).toFixed(2) : '';
-        const projectBtn = r.totalReturnDRIPCAGR != null
-          ? `<button class="link-btn" data-symbol="${sym}" data-rate="${cagrPct}">→ Growth Calc</button>`
+        const growthBtn = r.totalReturnDRIPCAGR != null
+          ? `<button class="link-btn" data-target="growth" data-symbol="${sym}" data-rate="${cagrPct}">→ Growth Calc</button>`
           : (isShortWindow ? '<span class="cagr-note">Range too short</span>' : '—');
+        // Only offer the Yield on Cost jump for tickers that actually paid a
+        // dividend somewhere in this comparison window -- for one that
+        // didn't, that tool would just show a flat 0% the whole way through,
+        // so the link would be pointing somewhere with nothing useful to see.
+        const yocBtn = r.dividendSum > 0
+          ? `<button class="link-btn" data-target="yoc" data-symbol="${sym}" data-purchase-date="${toISODate(r.startDate)}">→ Yield on Cost</button>`
+          : '';
         tr.innerHTML = `
           <td class="symbol-cell"><span class="symbol-inner"><span class="swatch" style="width:10px;height:10px;border-radius:50%;background:${colorFor(sym)};display:inline-block"></span>${sym}</span></td>
           <td>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</td>
           <td>${formatPercentWithCAGR(r.priceReturn, r.priceReturnCAGR, isShortWindow)}</td>
           <td>${formatPercentWithCAGR(r.dividendPlusCash, r.dividendPlusCashCAGR, isShortWindow)}</td>
           <td>${formatPercentWithCAGR(r.totalReturnDRIP, r.totalReturnDRIPCAGR, isShortWindow)}</td>
-          <td>${projectBtn}</td>
+          <td><div class="link-btn-stack">${growthBtn}${yocBtn}</div></td>
         `;
       }
       resultsTableBody.appendChild(tr);
@@ -468,6 +475,11 @@
   resultsTableBody.addEventListener('click', (e) => {
     const btn = e.target.closest('.link-btn');
     if (!btn) return;
+    if (btn.dataset.target === 'yoc') {
+      const params = new URLSearchParams({ symbols: btn.dataset.symbol, purchaseDate: btn.dataset.purchaseDate });
+      window.location.href = `/yield-on-cost.html?${params.toString()}`;
+      return;
+    }
     const params = new URLSearchParams({
       rate: btn.dataset.rate,
       source: btn.dataset.symbol,
