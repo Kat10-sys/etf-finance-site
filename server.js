@@ -1901,7 +1901,13 @@ app.get('/api/yield-on-cost', async (req, res) => {
       return res.status(400).json({ error: 'Purchase date cannot be in the future.' });
     }
 
-    const projectYears = Math.min(30, Math.max(1, Math.round(Number(req.query.projectYears) || 15)));
+    // Not "Number(...) || 15" -- that treats an explicit projectYears=0 the
+    // same as a missing/invalid value (0 is falsy), silently substituting
+    // the 15-year default instead of clamping it to the documented minimum
+    // of 1. Number.isFinite distinguishes "wasn't a real number" (use the
+    // default) from "was a real number, just out of range" (clamp it).
+    const parsedProjectYears = Number(req.query.projectYears);
+    const projectYears = Math.min(30, Math.max(1, Math.round(Number.isFinite(parsedProjectYears) ? parsedProjectYears : 15)));
 
     const results = {};
     const fetchErrors = {};

@@ -38,6 +38,39 @@ scratch. It also gives future work a place to land before it's built.
 
 ## 2026-09-04
 
+- **Stress-tested the new Yield on Cost tool and fixed two bugs it found** —
+  (1) a pure-logic reimplementation of `computeDividendTrend`/`buildYocCurve`
+  run against 20 synthetic dividend histories (steadily growing/declining/
+  flat payouts, a suspended distribution, a one-time-then-silent payment,
+  noisy-but-flat data, and both sides of the 2-year regression threshold)
+  all passed, confirming the algorithm itself is sound; (2) live API/UI
+  testing against malformed input and real tickers found two real issues,
+  both fixed:
+  - `projectYears=0` silently fell back to the 15-year default instead of
+    clamping to the documented minimum of 1 -- classic `Number(x) || 15`
+    falsy-zero bug (0 is falsy, so `0 || 15` evaluates to 15). Fixed in
+    both `server.js` and `yield-on-cost.js` by checking
+    `Number.isFinite(...)` instead of relying on truthiness, so "wasn't a
+    real number" (use the default) is distinguished from "was a real
+    number, just out of range" (clamp it).
+  - The Payout Trend column showed "Not enough dividend history yet" for a
+    stock that has *never* paid a dividend (e.g. BRK-B) -- the same message
+    used for a young fund that just needs more time, which wrongly implies
+    a trend will eventually show up. `computeDividendTrend` already
+    distinguished this via `reason: 'no-dividends'` vs. `'too-short'`; the
+    client just wasn't using it. Fixed in `trendCell()`
+    (`yield-on-cost.js`) to show "No dividend history" for the
+    never-paid-a-dividend case specifically.
+  - Also verified (no changes needed): non-dividend stocks correctly show
+    an exact 0.00% yield on cost rather than an error; an ancient purchase
+    date (e.g. 1800-01-01) correctly clamps to the ticker's real earliest
+    available data with a note, no crash; a NEO-listed ticker (Yahoo's
+    known daily-history gap) surfaces its existing specific error message
+    via `fetchErrors` rather than crashing; >4 symbols, missing/malformed/
+    future purchase dates, and duplicate symbols in one request all fail
+    or degrade the same way `/api/compare` already does for the same
+    classes of bad input.
+
 - **Added a new Yield on Cost tool** (`public/yield-on-cost.html`,
   `public/js/yield-on-cost.js`, `/api/yield-on-cost` in `server.js`) — user
   wanted to see a fund's dividend yield relative to their original purchase

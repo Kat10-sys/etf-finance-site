@@ -140,7 +140,11 @@
   });
 
   projectYearsInput.addEventListener('change', () => {
-    state.projectYears = Math.min(30, Math.max(1, Math.round(Number(projectYearsInput.value) || 15)));
+    // Number(...) || 15 would treat an explicit "0" the same as an empty/
+    // invalid field (0 is falsy), silently showing 15 instead of clamping
+    // to the documented minimum of 1 -- see the matching fix server-side.
+    const parsed = Number(projectYearsInput.value);
+    state.projectYears = Math.min(30, Math.max(1, Math.round(Number.isFinite(parsed) ? parsed : 15)));
     projectYearsInput.value = state.projectYears;
     updateURL();
     if (state.lastResults && state.tickers.length) runCalculate();
@@ -347,7 +351,12 @@
 
   function trendCell(trend) {
     if (trend.insufficientData) {
-      return `<span class="cagr-note">Not enough dividend history yet</span>`;
+      // 'no-dividends' means this ticker has never paid one -- distinct from
+      // 'too-short', where a trend may well show up given more time, so the
+      // messaging shouldn't imply waiting will change the first case.
+      return trend.reason === 'no-dividends'
+        ? `<span class="cagr-note">No dividend history</span>`
+        : `<span class="cagr-note">Not enough dividend history yet</span>`;
     }
     if (trend.suspended) {
       return `<span class="neg">Distribution currently suspended</span>`;
